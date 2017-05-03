@@ -1,0 +1,7 @@
+<?$APPLICATION->IncludeComponent(
+	"_my:mail.sender",
+	"",
+	Array(
+		"X" => "7",
+	)
+);?>
