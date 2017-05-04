@@ -1,0 +1,20 @@
+<style>
+.t input[type="checkbox"]::before
+{
+    content:' ';
+    color:transparent;
+    font-size:0;
+    display:block;
+    width:20px;
+    height:20px;
+    background:url('test.png') no-repeat 0 0;
+    box-sizing:border-box;
+}
+.t input[type="checkbox"]:checked:before{background-position: -5px -35px;}
+.t label{margin-left:5px;}
+</style>
+<div class="t">
+    <input type="checkbox" id="m_cb">
+    <label for="m_cb"><span>text</span>
+</div>
+</label>
