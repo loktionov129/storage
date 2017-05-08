@@ -1,3 +1,4 @@
+1)
 <?php
 
 	$arFilter = Array("IBLOCK_ID"=>$arItem['IBLOCK_ID'], "ID"=>$arItem[ID]);
@@ -7,3 +8,18 @@
 	{
 		$arProps = $ob->GetProperties();
 	}
+?>
+
+Получить значения всех свойств элемента, зная его ID.
+<?
+	$db_props = CIBlockElement::GetProperty(IBLOCK_ID, ELEMENT_ID, "sort", "asc", array());
+	$PROPS = array();
+	while($ar_props = $db_props->Fetch())
+	$PROPS[$ar_props['CODE']] = $ar_props['VALUE'];
+?>
+
+Получить свойства элементов, используя метод CIBlockElement::GetList
+<?
+	$arSelect = array("ID", "NAME", "PROPERTY_prop_code_1", "PROPERTY_prop_code_2");
+	$res = CIBlockElement::GetList(array(), array(), false, array(), $arSelect);
+?>
