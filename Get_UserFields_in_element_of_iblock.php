@@ -1,9 +1,9 @@
 Получить значения всех свойств элемента, зная его ID.
 <?
-	$db_props = CIBlockElement::GetProperty(IBLOCK_ID, ELEMENT_ID, "sort", "asc", array());
+	$db_props = CIBlockElement::GetProperty($arItem['IBLOCK_ID'], $arItem['ID'], "sort", "asc", array());
 	$PROPS = array();
 	while($ar_props = $db_props->Fetch())
-	$PROPS[$ar_props['CODE']] = $ar_props['VALUE'];
+		$PROPS[$ar_props['CODE']] = $ar_props['VALUE'];
 ?>
 
 Получить свойства элементов, используя метод CIBlockElement::GetList
@@ -15,7 +15,7 @@
 (2) Получить значения всех свойств элемента, зная его ID.
 <?php
 
-	$arFilter = Array("IBLOCK_ID"=>$arItem['IBLOCK_ID'], "ID"=>$arItem[ID]);
+	$arFilter = Array("IBLOCK_ID"=>$arItem['IBLOCK_ID'], "ID"=>$arItem['ID']);
 	$res = CIBlockElement::GetList(Array(), $arFilter);
 	$arProps = array();
 	if ($ob = $res->GetNextElement())
