@@ -1,15 +1,3 @@
-1)
-<?php
-
-	$arFilter = Array("IBLOCK_ID"=>$arItem['IBLOCK_ID'], "ID"=>$arItem[ID]);
-	$res = CIBlockElement::GetList(Array(), $arFilter);
-	$arProps = array();
-	if ($ob = $res->GetNextElement())
-	{
-		$arProps = $ob->GetProperties();
-	}
-?>
-
 Получить значения всех свойств элемента, зная его ID.
 <?
 	$db_props = CIBlockElement::GetProperty(IBLOCK_ID, ELEMENT_ID, "sort", "asc", array());
@@ -22,4 +10,16 @@
 <?
 	$arSelect = array("ID", "NAME", "PROPERTY_prop_code_1", "PROPERTY_prop_code_2");
 	$res = CIBlockElement::GetList(array(), array(), false, array(), $arSelect);
+?>
+
+(2) Получить значения всех свойств элемента, зная его ID.
+<?php
+
+	$arFilter = Array("IBLOCK_ID"=>$arItem['IBLOCK_ID'], "ID"=>$arItem[ID]);
+	$res = CIBlockElement::GetList(Array(), $arFilter);
+	$arProps = array();
+	if ($ob = $res->GetNextElement())
+	{
+		$arProps = $ob->GetProperties();
+	}
 ?>
