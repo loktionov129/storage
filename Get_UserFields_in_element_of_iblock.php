@@ -1,3 +1,9 @@
+Публичная часть - параметры компонента - источник данных - необходимые поля:
+$arItem['PROPERTIES']['DOUBLE']['VALUE']
+
+////////////////////////////////////////////
+
+
 Получить значения всех свойств элемента, зная его ID.
 <?
 	$db_props = CIBlockElement::GetProperty($arItem['IBLOCK_ID'], $arItem['ID'], "sort", "asc", array());
