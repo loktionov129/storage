@@ -1,4 +1,4 @@
-<span style="color:silver">sudo /etc/init.d/apache2 restart</span>
+<font color="red">sudo /etc/init.d/apache2 restart</font>
 
 # Карта развития веб-разработчика by <a href="https://github.com/zualex/devmap">zualex</a>
 
