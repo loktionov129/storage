@@ -1,6 +1,6 @@
-* sudo /etc/init.d/apache2 restart
+- sudo /etc/init.d/apache2 restart
 * sudo /etc/init.d/mysql restart
-- mysql -u root -p
+* mysql -u root -p
 
 # Карта развития веб-разработчика by <a href="https://github.com/zualex/devmap">zualex</a>
 
