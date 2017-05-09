@@ -1,4 +1,5 @@
 * sudo /etc/init.d/apache2 restart
+* sudo /etc/init.d/mysql restart
 
 # Карта развития веб-разработчика by <a href="https://github.com/zualex/devmap">zualex</a>
 
