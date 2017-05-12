@@ -2,6 +2,8 @@
 * sudo /etc/init.d/mysql restart
 * mysql -u root -p
 
+- (function(){function read(url){var r=new XMLHttpRequest();r.open('HEAD',url,false);r.send(null);return r.getAllResponseHeaders();}console.log(read(window.location))})();
+
 # Карта развития веб-разработчика by <a href="https://github.com/zualex/devmap">zualex</a>
 
 ## Содержание 
