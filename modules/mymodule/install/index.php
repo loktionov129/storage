@@ -40,14 +40,10 @@ class mymodule extends CModule
     function UnInstallFiles()
     {
         DeleteDirFilesEx("/bitrix/components/my");
-        \Bitrix\Main\IO\File::deleteFile("/bitrix/admin/user_custom.php");
+        \Bitrix\Main\IO\File::deleteFile($_SERVER["DOCUMENT_ROOT"]."/bitrix/admin/user_custom.php");
         return true;
     }
-    
-    function BeforeLogin()
-    {
-        echo 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz';
-    }
+
 
     function DoInstall()
     {   
