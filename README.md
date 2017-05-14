@@ -4,6 +4,8 @@
 
 - (function(){function read(url){var r=new XMLHttpRequest();r.open('HEAD',url,false);r.send(null);return r.getAllResponseHeaders();}console.log(read(window.location))})();
 
+http://training.1c-bitrix.ru/upload/online_kurs_free/d7p2/materials/kd7p2_all.zip
+
 # Карта развития веб-разработчика by <a href="https://github.com/zualex/devmap">zualex</a>
 
 ## Содержание 
