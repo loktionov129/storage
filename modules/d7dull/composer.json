@@ -1,0 +1,24 @@
+{
+  "name": "bitrix-expert/bex.d7dull",
+  "description": "Заготовка модуля на d7, на основе которой можно разрабатывать свои решения",
+  "keywords": ["bitrix", "Битрикс", "d7", "модуль"],
+  "type": "bitrix-module",
+  "license": "MIT",
+  "support": {
+    "www": "http://bitrix.expert",
+    "skype": "may_cat_ghost",
+    "source": "http://github.com/bitrix-expert/bex.d7dull/"
+  },
+  "authors": [
+    {
+      "name": "Цупко Игорь (may_cat)",
+      "email": "maicatus@gmail.com"
+    }
+  ],
+  "extra": {
+    "installer-name": "bex.d7dull"
+  },
+  "require": {
+    "composer/installers": ">=1.0.22 <2.0"
+  }
+}
