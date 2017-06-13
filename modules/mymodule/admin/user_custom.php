@@ -1,3 +1,0 @@
-<?
-var_dump("HqwdELLO");
-?>
