@@ -1,0 +1,24 @@
+<style>
+.wrapper {
+  position: relative;
+  overflow: hidden;
+}
+.wrapper img {
+  max-width: 100%;
+  -moz-transition: all 0.3s;
+  -webkit-transition: all 0.3s;
+  transition: all 0.3s;
+}
+.wrapper:hover img {
+  -moz-transform: scale(1.1);
+  -webkit-transform: scale(1.1);
+  transform: scale(1.1);
+}
+</style>
+
+<div class="wrapper">
+  <a href="<?=$arItem["DETAIL_PAGE_URL"]?>">
+    <img src="<?=$file['src']?>" title="<?=$arItem["NAME"]?>"/>
+  </a>
+  <div class="wrapper-overlay top"></div>
+</div>
