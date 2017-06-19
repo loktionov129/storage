@@ -1,3 +1,4 @@
+## <meta name="viewport" content="width=device-width, initial-scale=1.0">
 - sudo /etc/init.d/apache2 restart
 * sudo /etc/init.d/mysql restart
 * mysql -u root -p
