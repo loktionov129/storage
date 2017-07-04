@@ -98,13 +98,13 @@ gulp.task('js', function() {
                 this.emit('end');
             }
         }))
-        .pipe(jshint()).pipe(jshint.reporter(stylish))
         .pipe(config.production ? gutil.noop() : sourcemaps.init())
+        .pipe(jshint()).pipe(jshint.reporter(stylish))
         .pipe(babel({presets: ['es2015']}))
         //.pipe(gulp.dest(config.path.build.js))
         .pipe(rename({ suffix: '.min' }))
         .pipe(uglify())
-        .pipe(config.production ? gutil.noop() : sourcemaps.write())
+        .pipe(config.production ? gutil.noop() : sourcemaps.write('./'))
         .pipe(size({title: 'JS'}))
         .pipe(gulp.dest(config.path.build.js))
         .pipe(reload({stream: true}));
