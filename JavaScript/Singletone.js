@@ -22,7 +22,7 @@ const Basket = (function () {
 		this.push = (item) => items.push(item);
 		this.show = () => items.forEach( (item, index) =>
 			document.querySelector("#result").innerHTML += `items[${index}] = ${item}<br>`
-			);
+		);
 		this.removeAt = (index) => {
 			let item = items.splice(index, 1).shift();
 			document.querySelector("#result").innerHTML +=  `remove: items[${index}] = ${item}<br>`;
