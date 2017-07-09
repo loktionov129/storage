@@ -11,7 +11,7 @@ const Basket = (function () {
 		if (instance) {
 			return instance;
 		}
-    
+		
 		if (this && this.constructor === BasketConstructor) {
 			instance = this;
 		} else {
@@ -21,12 +21,12 @@ const Basket = (function () {
 		let items = [];
 		this.push = (item) => items.push(item);
 		this.show = () => items.forEach( (item, index) =>
-	    	document.querySelector("#result").innerHTML += `items[${index}] = ${item}<br>`
-	    );
+			document.querySelector("#result").innerHTML += `items[${index}] = ${item}<br>`
+			);
 		this.removeAt = (index) => {
-	    	let item = items.splice(index, 1).shift();
-	    	document.querySelector("#result").innerHTML +=  `remove: items[${index}] = ${item}<br>`;
-	    };
+			let item = items.splice(index, 1).shift();
+			document.querySelector("#result").innerHTML +=  `remove: items[${index}] = ${item}<br>`;
+		};
 	};
 }());
 
