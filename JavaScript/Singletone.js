@@ -3,6 +3,7 @@
  * without new, can be called from whatever (object method,
  * standalone function). Works fine in strict mode
  */
+
 const Basket = (function () {
 	let instance;
 
@@ -20,32 +21,14 @@ const Basket = (function () {
 		let items = [];
 		this.push = (item) => items.push(item);
 		this.show = () => items.forEach( (item, index) =>
-    	document.querySelector("#result").innerHTML += `items[${index}] = ${item}<br>`
-    );
+	    	document.querySelector("#result").innerHTML += `items[${index}] = ${item}<br>`
+	    );
 		this.removeAt = (index) => {
-    	let item = items.splice(index, 1).shift();
-    	document.querySelector("#result").innerHTML +=  `remove: items[${index}] = ${item}<br>`;
-    };
+	    	let item = items.splice(index, 1).shift();
+	    	document.querySelector("#result").innerHTML +=  `remove: items[${index}] = ${item}<br>`;
+	    };
 	};
 }());
-
-// Tests:
-
-const saleBasket = new Basket();
-
-for (let i = 0; i < 5; ++i) {
-	saleBasket.push( parseInt(Math.random() * 100) );
-}
-
-saleBasket.show();
-document.querySelector("#result").innerHTML += "<br>";
-
-(new Basket()).removeAt(2);
-document.querySelector("#result").innerHTML += "<br>";
-
-var test = Basket();
-test.show();
-
 
 /*
 Разберем что происходит в возвращаемой функции.
@@ -64,3 +47,19 @@ This так же может быть определен, если функция
 
 http://dmitrypodgorniy.com/blog/all/singlton-na-javascript/
 */
+
+// Test:
+const saleBasket = new Basket();
+
+for (let i = 0; i < 5; ++i) {
+	saleBasket.push( parseInt(Math.random() * 100) );
+}
+
+saleBasket.show();
+document.querySelector("#result").innerHTML += "<br>";
+
+(new Basket()).removeAt(2);
+document.querySelector("#result").innerHTML += "<br>";
+
+var test = Basket();
+test.show();
