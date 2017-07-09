@@ -25,7 +25,7 @@ const Basket = (function () {
 		);
 		this.removeAt = (index) => {
 			let item = items.splice(index, 1).shift();
-			document.querySelector("#result").innerHTML +=  `remove: items[${index}] = ${item}<br>`;
+			document.querySelector("#result").innerHTML += `remove: items[${index}] = ${item}<br>`;
 		};
 	};
 }());
@@ -63,3 +63,18 @@ document.querySelector("#result").innerHTML += "<br>";
 
 var test = Basket();
 test.show();
+
+/* Output:
+	items[0] = 33
+	items[1] = 77
+	items[2] = 93
+	items[3] = 38
+	items[4] = 80
+
+	remove: items[2] = 93
+
+	items[0] = 33
+	items[1] = 77
+	items[2] = 38
+	items[3] = 80
+*/
