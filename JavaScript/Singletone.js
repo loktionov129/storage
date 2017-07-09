@@ -18,7 +18,10 @@ const Basket = (function () {
 			return new BasketConstructor();
 		}
 
+		// private:
 		let items = [];
+		
+		// public:
 		this.push = (item) => items.push(item);
 		this.show = () => items.forEach( (item, index) =>
 			document.querySelector("#result").innerHTML += `items[${index}] = ${item}<br>`
