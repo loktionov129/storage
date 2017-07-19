@@ -1,3 +1,4 @@
+/* jshint ignore:start */
 'use strict';
 
 /* Gulp plugins */
@@ -6,13 +7,14 @@ const gulp = require('gulp'), // Task runner
     plumber = require('gulp-plumber'), // Prevent pipe breaking caused by errors from gulp plugins
     notify = require('gulp-notify'), // Notification plugin for gulp
     watch = require('gulp-watch'), // Watch, that actually is an endless stream
-    rename = require('gulp-rename'), // Rename files
     del = require('del'), // Delete something
+    rename = require('gulp-rename'), // Rename files
     concat = require('gulp-concat'), // Concatenates files
     htmlmin = require('gulp-htmlmin'),
-    less = require('gulp-less'), // Compile Less to CSS
+    less = require('gulp-less'), // Compile less to CSS
     autoprefixer = require('gulp-autoprefixer'), // Prefix CSS
-    minifycss = require('gulp-minify-css'), // Minify CSS
+    cleanCSS = require('gulp-clean-css'), // Minify CSS
+    gcmq = require('gulp-group-css-media-queries'),
     babel = require('gulp-babel'),
     uglify = require('gulp-uglify'), // Minify JS
     jshint = require('gulp-jshint'), // JS code linter
@@ -34,13 +36,13 @@ const config = {
         },
         src: { // Set source paths
             html: 'src/index.html',
-            js: 'src/js/app.js',
-            style: 'src/styles/style.less'
+            js: 'src/js/**/*.js',
+            style: 'src/styles/main.less'
         },
         watch: { // Set watch paths
             html: 'src/index.html',
-            js: 'src/js/app.js',
-            style: 'src/styles/style.less'
+            js: 'src/js/**/*.js',
+            style: 'src/styles/**/*.less'
         },
         clean: ['build/**/*', '!build/.gitignore', '!build/favicon.ico'], // Set paths and exludes for cleaning build dir
     }
@@ -61,7 +63,7 @@ gulp.task('build', function(cb) {
         'clean',
         'html',
         'js',
-        'less',
+        'css',
         cb
     );
 });
@@ -74,6 +76,20 @@ gulp.task('clean', function () {
 /* HTML */
 gulp.task('html', function () {
     return gulp.src(config.path.src.html)
+        .pipe(plumber({
+            errorHandler: function (error) {
+                const message = error.message || '';
+                const errName = error.name || '';
+
+                gutil.log(gutil.colors.red.bold('[HTML Error]')+' '+ gutil.colors.bgRed(errName));
+                gutil.log(gutil.colors.bold('message:') +' '+ message);
+                notify({
+                    title: "[HTML Error] " + errName,
+                    message: message
+                }).write('');
+                this.emit('end');
+            }
+        }))
         .pipe(htmlmin({collapseWhitespace: true}))
         .pipe(size({title: 'HTML'}))
         .pipe(gulp.dest(config.path.build.html))
@@ -101,9 +117,10 @@ gulp.task('js', function() {
         .pipe(config.production ? gutil.noop() : sourcemaps.init())
         .pipe(jshint()).pipe(jshint.reporter(stylish))
         .pipe(babel({presets: ['es2015']}))
+        .pipe(concat('app.js'))
         //.pipe(gulp.dest(config.path.build.js))
-        .pipe(rename({ suffix: '.min' }))
         .pipe(uglify())
+        .pipe(rename({ suffix: '.min' }))
         .pipe(config.production ? gutil.noop() : sourcemaps.write('./'))
         .pipe(size({title: 'JS'}))
         .pipe(gulp.dest(config.path.build.js))
@@ -111,8 +128,8 @@ gulp.task('js', function() {
 });
 
 
-/* Less */
-gulp.task('less', function() {
+/* CSS */
+gulp.task('css', function() {
     return gulp.src(config.path.src.style)
         .pipe(plumber({
             errorHandler: function (error) {
@@ -134,9 +151,11 @@ gulp.task('less', function() {
         .pipe(config.production ? gutil.noop() : sourcemaps.init())
         .pipe(less())
         .pipe(autoprefixer('> 2%'))
+        .pipe(gcmq())
+        .pipe(concat('style.css'))
         //.pipe(gulp.dest(config.path.build.css))
         .pipe(rename({ suffix: '.min' }))
-        .pipe(minifycss())
+        .pipe(cleanCSS())
         .pipe(config.production ? gutil.noop() : sourcemaps.write('./'))
         .pipe(size({title: 'CSS'}))
         .pipe(gulp.dest(config.path.build.css))
@@ -152,7 +171,7 @@ gulp.task('watch', ['webserver'], function(){
         gulp.start('js');
     });
     watch([config.path.watch.style], function(event, cb) {
-        gulp.start('less');
+        gulp.start('css');
     });
 });
 
@@ -177,7 +196,3 @@ gulp.task('webserver', function () {
 
 
 */
-
-gulp.task('test', function(){
-    gutil.log(gutil.env.production);
-});
