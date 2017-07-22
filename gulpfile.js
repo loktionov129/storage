@@ -70,7 +70,7 @@ gulp.task('build', function(cb) {
 
 /* Clean build directory */
 gulp.task('clean', function () {
-    del(config.path.clean);
+    return del(config.path.clean);
 });
 
 /* HTML */
