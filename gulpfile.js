@@ -30,6 +30,7 @@ const gulp = require('gulp'), // Task runner
 
 /* Project settings */
 const config = {
+    // gulp <taskname> --production
     production: !!gutil.env.production,
     path: {
         build: { // Set build paths
