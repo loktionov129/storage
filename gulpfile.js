@@ -1,5 +1,8 @@
 /* jshint ignore:start */
 'use strict';
+/* jshint ignore:end */
+/* jshint esversion:6 */
+/* jshint unused:true */
 
 /* Gulp plugins */
 const gulp = require('gulp'), // Task runner
