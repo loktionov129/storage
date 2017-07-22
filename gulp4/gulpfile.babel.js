@@ -2,7 +2,7 @@
 'use strict';
 /* jshint ignore:end */
 /* jshint esversion:6 */
-///jshint unused:true 
+/* jshint unused:true */
 
 /* Gulp plugins */
 import gulp from 'gulp4';						// Task runner
@@ -142,16 +142,6 @@ export function js() {
 		.pipe(reload({ stream: true }));
 }
 
-const watch = gulp.parallel(
-	webserver,
-	() => {
-		gulp.watch(config.path.watch.html, html);
-		gulp.watch(config.path.watch.css, css);
-		gulp.watch(config.path.watch.js, js);
-	}
-);
-export { watch };
-
 export function webserver() {
 	return browserSync({
 		server: {
@@ -164,6 +154,16 @@ export function webserver() {
 		logPrefix: 'BrowserSync'
 	});
 }
+
+const watch = gulp.parallel(
+	webserver,
+	() => {
+		gulp.watch(config.path.watch.html, html);
+		gulp.watch(config.path.watch.css, css);
+		gulp.watch(config.path.watch.js, js);
+	}
+);
+export { watch };
 
 const build = gulp.series(clean, gulp.parallel(html, css, js));
 export { build };
