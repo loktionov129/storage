@@ -1,0 +1,59 @@
+.main {
+  margin: 0 auto;
+  max-width: 480px;
+}
+
+.todo-form__title {
+  width: 85%;
+}
+
+.todo-form__submit {
+  width: 10%;
+}
+
+.todo-list__task.isEditing {
+  display: none;
+}
+
+.todo-list__edit {
+  display: none;
+}
+
+.todo-list__task.isEditing+.todo-list__edit {
+  display: inline-block;
+}
+
+.todo-list__task {
+  position: relative;
+  display: table-cell;
+  vertical-align: middle;
+}
+
+.todo-list__remove {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: -30px;
+  bottom: 0;
+  width: 30px;
+  height: 30px;
+  margin: auto 0;
+  background: none;
+  outline: none;
+  border: none;
+  font-size: 23px;
+  color: #cc9a9a;
+  transition: color 0.2s ease-out;
+  cursor: pointer;
+}
+.todo-list__remove:hover {
+    color: red;
+}
+
+.todo-list__remove:after {
+  content: 'x';
+}
+
+.todo-list__item:hover .todo-list__remove {
+  display: block;
+}
