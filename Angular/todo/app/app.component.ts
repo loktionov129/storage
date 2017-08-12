@@ -49,8 +49,8 @@ export class AppComponent {
     this.saveTodos();
   }
 
-  public toggleEditing(todo: Todo, input?: HTMLInputElement, event?: Event) : void {
-      todo.editing = !todo.editing;
+  public showEditing(todo: Todo, input?: HTMLInputElement, event?: Event) : void {
+      todo.editing = true;
 
       if (input) {
           input.value = todo.title;
@@ -73,8 +73,15 @@ export class AppComponent {
           return;
       }
 
-      todo.title = newTitle.trim();
-      todo.editing = false;
+      newTitle = newTitle.trim();
+      if (newTitle.length == 0) {
+          let index: number = this.todos.indexOf(todo);
+          this.todos.splice(index, 1);
+          this.saveTodos();
+      } else {
+          todo.title = newTitle;
+          todo.editing = false;
+      }
       this.saveTodos();
   }
   
