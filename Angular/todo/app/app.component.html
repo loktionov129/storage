@@ -15,8 +15,8 @@
       <div class="todo-list__task" [class.isEditing]="todo.editing">
         <input type="checkbox" [checked]="todo.completed" (click)="toggle(todo)">
         <span class="todo-list__title"
-          (dblclick)="toggleEditing(todo, newTitle);"
-          (contextmenu)="toggleEditing(todo, newTitle, $event);"
+          (dblclick)="showEditing(todo, newTitle);"
+          (contextmenu)="showEditing(todo, newTitle, $event);"
         >
           {{ todo.title }}
         </span>
@@ -25,9 +25,9 @@
 
       <input type="text" class="todo-list__edit"
         #newTitle
-        (blur)="saveEditing(todo, newTitle.value);"
+        (blur)="todo.editing = false;"
         (keyup.enter)="saveEditing(todo, newTitle.value);"
-        (keyup.escape)="toggleEditing(todo);"
+        (keyup.escape)="todo.editing = false;"
       >
     </div>
 
