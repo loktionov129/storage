@@ -7,7 +7,6 @@ class App {
     findCompanyByName(name) {
         return new Promise((resolve, reject) => {
             const url = 'https://krasnoyarsk.hh.ru/employers_list?query=${name}&areaId=113';
-            
             const request = https.request(url, function(res) {
                 console.log("\nstatus code: ", res.statusCode);
                 res.on('data', function(data) {
