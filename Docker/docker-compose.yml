@@ -1,4 +1,5 @@
 version: '2.1'
+
 services:
   web:
     build:
@@ -13,6 +14,9 @@ services:
     links:
       - db
       - redis
+    depends_on:
+      - db
+      - redis
     environment:
       APP_ENV: local
       VIRTUAL_HOST: companyname-servicename.local
@@ -21,6 +25,7 @@ services:
       SERVICE_NAME: companyname-servicename
     volumes:
     - .:/home/www/app
+
   db:
     image: mysql:5.7
     hostname: companyname-servicename-db
@@ -38,6 +43,7 @@ services:
       MYSQL_PASSWORD: secret
     volumes:
     - ./.data:/var/lib/mysql
+
   redis:
     image: redis:alpine
     container_name: companyname-servicename-redis
