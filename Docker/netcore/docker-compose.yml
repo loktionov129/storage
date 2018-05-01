@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+  netcoredocker:
+    image: netcoredocker
+    build:
+      context: .
+      dockerfile: netcoredocker/Dockerfile
