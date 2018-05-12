@@ -9,7 +9,7 @@ import { MyThingService } from '../my-thing.service';
     templateUrl: './my-thing.component.html'
 })
 export class MyThingComponent implements OnDestroy, OnInit {
-    private ngUnsubscribe: Subject<void> = new Subject<void>();
+    private componentDestroyed$: Subject<boolean> = new Subject<boolean>();
 
     constructor(
         private myThingService: MyThingService,
@@ -17,17 +17,17 @@ export class MyThingComponent implements OnDestroy, OnInit {
 
     ngOnInit() {
         this.myThingService.getThings()
-            .takeUntil(this.ngUnsubscribe)
+            .takeUntil(this.componentDestroyed$)
             .subscribe(things => console.log(things));
 
         this.myThingService.getOtherThings()
-            .takeUntil(this.ngUnsubscribe)
+            .takeUntil(this.componentDestroyed$)
             .subscribe(things => console.log(things));
 
     }
 
     ngOnDestroy() {
-        this.ngUnsubscribe.next();
-        this.ngUnsubscribe.complete();
+        this.componentDestroyed$.next(true);
+        this.componentDestroyed$.unsubscribe();
     }
 }
