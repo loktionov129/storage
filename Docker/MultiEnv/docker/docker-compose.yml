@@ -1,0 +1,31 @@
+version: '3'
+
+services:
+    myappnamedb:
+        environment:
+            - POSTGRES_DB=myappnamedb
+            - POSTGRES_USER=agent4myapp
+            - POSTGRES_PASSWORD=somepasswordformyapp
+        image: myappnamedb
+        hostname: myappnamedb
+        container_name: myappnamedb
+        labels:
+            - SERVICE_NAME=myappnamedb
+        volumes:
+            - /private/var/lib/postgresql:/var/lib/postgresql
+
+    myappnamenginx:
+# TODO
+# Remove sections: 'expose' and 'ports'
+        expose:
+            - 8080
+        ports:
+            - 8080:8080
+        image: myappnamenginx
+        hostname: myappnamenginx
+        container_name: myappnamenginx
+        environment:
+            - APP_ENV=prod
+            - VIRTUAL_HOST=myappnamenginx
+        labels:
+            - SERVICE_NAME=myappnamenginx
