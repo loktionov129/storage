@@ -1,6 +1,7 @@
 docker build
 
 docker run -d --rm -v '/C/projects/wptest':'/www' -p 8081:8081 caskill
+docker run --rm --hostname localhost -p 8080:8080 --name browserclient mpgp129/browserclient:latest
 
 docker ps
 docker ps -a
