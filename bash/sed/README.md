@@ -1,4 +1,4 @@
-<img src="_screenshot.jpg" />
+<img src="_demo.jpg" />
 
 ```sh
 $ cat config.json
@@ -8,7 +8,8 @@ $ cat config.json
 {
     "url": "%APP_URL%",
     "log_level": "debug",
-    "database": "%DB_URL%"
+    "database": "%DB_URL%",
+    "database_pwd": "%DB_PASSWORD%"
 }
 ```
 
@@ -26,9 +27,12 @@ $ cat config.json
 {
     "url": "http://localhost",
     "log_level": "debug",
-    "database": "tcp://127.0.0.1:5432"
+    "database": "tcp://127.0.0.1:5432",
+    "database_pwd": "FKS#%=35ga3"
 }
 ```
+
+---
 
 ---
 
@@ -39,4 +43,5 @@ $ cat .env.dev
 ```JavaScript
 APP_URL=http://localhost
 DB_URL=tcp://127.0.0.1:5432
+DB_PASSWORD=FKS#%=35ga3
 ```
