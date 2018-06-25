@@ -14,4 +14,4 @@ while IFS="" read -r LINE || [[ -n "$LINE" ]]; do
 done < $ENV_FILE
 
 REPLACE_STRING=$(echo $REPLACE_STRING | sed 's/.$//')
-sed -i $REPLACE_STRING config.json
+sed -i $REPLACE_STRING $INPUT_FILE
