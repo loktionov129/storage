@@ -1,3 +1,5 @@
+<img src="_screenshot.jpg" />
+
 ```sh
 $ cat config.json
 ```
