@@ -1,0 +1,1 @@
+echo "[app]: i am use the ""$1"
