@@ -1,3 +1,5 @@
+-- https://myadventuresincoding.wordpress.com/2016/01/05/sql-server-how-to-write-an-upsert-using-merge/
+
 Merge SettingsValue As rsv
 Using (
 	Select id as RestaurantId,
