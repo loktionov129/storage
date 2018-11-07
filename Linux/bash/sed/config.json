@@ -1,6 +1,0 @@
-{
-    "url": "%APP_URL%",
-    "log_level": "debug",
-    "database": "%DB_URL%",
-    "database_pwd": "%DB_PASSWORD%"
-}

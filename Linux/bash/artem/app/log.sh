@@ -1,1 +1,0 @@
-echo "[log]: i am use the ""$1"
