@@ -1,0 +1,7 @@
+---
+# tasks file for example.ping
+
+- name: Ping servers
+  ping:
+
+

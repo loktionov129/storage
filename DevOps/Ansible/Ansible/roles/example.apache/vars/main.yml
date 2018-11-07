@@ -1,0 +1,8 @@
+---
+# vars file for example.apache
+
+DB_HOST: localhost
+DB_USER: SA
+DB_PASSWORD: sup3r_passw0rd
+DB_NAME: information_skima
+
