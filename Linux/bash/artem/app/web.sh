@@ -1,1 +1,0 @@
-echo "[web]: i am use the "$1""
