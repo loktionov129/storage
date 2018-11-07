@@ -1,0 +1,38 @@
+---
+# tasks file for example.debug
+
+- name: "print var 'ansible_user'"
+  debug:
+    var: ansible_user
+
+- set_fact: full_message="hello {{ ansible_user }}"
+
+- name: "ignore error"
+  apt: name=notfounded state=latest
+  ignore_errors: yes
+
+- name: "fail when"
+  shell: echo hello world
+  register: result_fail
+  failed_when: "'world' in result_fail.stdout"
+  #failed_when: result_fail.rc == 0
+
+- name: "print any text with variables"
+  debug:
+    msg: "{{ full_message }} from {{ ansible_host }}:{{ ansible_port }}"
+
+- name: "get uptime and save output to a variable"
+  shell: uptime
+  register: result_uptime
+- debug:
+    var: result_uptime.stdout
+
+- name: "run_once + delegate_to"
+  shell: ls ~
+  register: result
+  run_once: yes
+  delegate_to: 127.0.0.1
+
+- name: "print result"
+  debug: var=result
+

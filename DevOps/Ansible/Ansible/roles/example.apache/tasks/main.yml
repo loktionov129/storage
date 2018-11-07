@@ -1,0 +1,19 @@
+---
+# tasks file for example.apache
+
+- block:
+  - name: "Install Apache"
+    apt: name=apache2 state=latest
+
+  - name: "Generate appsettings.json"
+    template: src=appsettings.j2 dest=/var/www/html/appsettings.json mode=0555
+
+  - name: "Upload web-site"
+    copy: src=. dest=/var/www/html mode=0555
+    notify: Restart Apache
+
+  - name: "Start service"
+    service: name=apache2 state=started enabled=yes
+
+  when: ansible_os_family == "Debian"
+
