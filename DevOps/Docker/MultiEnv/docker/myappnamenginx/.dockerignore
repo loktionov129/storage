@@ -1,0 +1,7 @@
+.git
+.gitignore
+.dockerignore
+artifacts
+scripts
+src/dist
+src/node_modules

@@ -1,0 +1,1 @@
+echo "[test]: i am use the ""$1"

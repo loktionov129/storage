@@ -1,0 +1,9 @@
+[dev_api]
+node1 ansible_host=172.17.0.1 ansible_port=32768
+
+#[dev_db]
+
+[dev:children]
+dev_api
+#dev_db
+#dev_etc

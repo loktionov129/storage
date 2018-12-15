@@ -1,9 +1,6 @@
 [https://loktionov129.github.io/Web/](https://loktionov129.github.io/Web/)
 ## &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
-- &lt;?=number_format($arItem["PRICE"], 0, ',', ' ')?&gt; ₽
-- sudo /etc/init.d/apache2 restart
-* sudo /etc/init.d/mysql restart
-* mysql -u root -p
+
 
 - (function(){function read(url){var r=new XMLHttpRequest();r.open('HEAD',url,false);r.send(null);return r.getAllResponseHeaders();}console.log(read(window.location))})();
 
