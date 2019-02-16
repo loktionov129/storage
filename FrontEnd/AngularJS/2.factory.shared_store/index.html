@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" ng-app="app">
+<head>
+  <meta charset="utf-8">
+  <title>AngularJS</title>
+  <meta name="description" content="AngularJS">
+  <meta name="author" content="Me">
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.7.6/angular.min.js"></script>
+  <script src="app.module.js"></script>
+</head>
+<body>
+  <div ng-controller="home">
+    <label for="task">Task:</label>
+    <input type="text" name="task" id="task" ng-model="store.value" placeholder="Do something..." />
+  </div>
+  <div ng-controller="another">
+    <label for="text">Text:</label>
+    <input type="text" name="text" id="text" ng-model="store2.value" placeholder="Do something..." />
+  </div>
+</body>
+</html>
