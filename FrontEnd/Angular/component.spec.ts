@@ -56,3 +56,33 @@ describe(`${component.name} | Компонент для чего-то:`, () => {
         //apiServiceMock.get$()
     });
 });
+
+
+
+
+
+
+
+
+
+
+/* toHaveBeenCalledWith  */
+
+
+    it('probros', () => {
+        service.showInfoPopup();
+        verify(popupServiceMock.showPopup(deepEqual(params))).once();
+    });
+    
+    it('kaptur', () => {
+        service.showInfoPopup();
+        const [params] = capture(popupServiceMock.showPopup).last();
+        expect(params).toEqual({...});
+    });
+    
+
+    it('debounceTime', fakeAsync(() => {
+        sub$.emit(42);
+        tick(DEBOUNCE_TIME);
+        expect...
+    }));
