@@ -1,0 +1,33 @@
+unalias grs
+alias grs='git reset --soft HEAD^1'
+
+unalias gca
+alias gca='git commit -v --no-edit --amend'
+
+unalias gcam
+alias gcam='git commit -v --amend -m'
+
+unalias gc
+alias gc='git commit -m $(git symbolic-ref --short HEAD) -m'
+#alias gc='git commit -m'
+
+alias gpl='git pull'
+alias gplo='git pull origin $(git symbolic-ref --short HEAD)'
+
+alias gp='git push'
+alias gpo='git push origin $(git symbolic-ref --short HEAD) --no-verify'
+alias gpn='git push --no-verify'
+alias gpfn='git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
+alias gpnf='git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
+
+unalias ga
+alias ga='git add .'
+
+alias gs='git status'
+alias gd='git diff'
+
+unalias gl
+alias gl='git log'
+
+unalias gf
+alias gf='git fetch --all --prune'

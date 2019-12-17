@@ -1,42 +1,62 @@
 //https://netbasal.com/dynamically-creating-components-with-angular-a7346f4a982d
-//https://plnkr.co/edit/VSctCwNMctHIp4WuHLBy?p=preview
+
 
 //our root app component
-import {Component, NgModule,Input,ComponentFactory,ComponentRef, ComponentFactoryResolver, ViewContainerRef, ChangeDetectorRef, TemplateRef, ViewChild, TemplateRef, Output, EventEmitter, OnInit} from '@angular/core'
+import {Component, NgModule,Input,ComponentFactory,ComponentRef, ComponentFactoryResolver, ViewContainerRef, ViewChild, Output, EventEmitter, Type} from '@angular/core'
 import {BrowserModule} from '@angular/platform-browser'
 
+interface IAlertComponent {
+  type: string;
+  output: EventEmitter<string>;
+}
+
 @Component({
-  selector: "alert",
+  selector: 'danger-alert',
   template: `
-    <h1 (click)="output.next('output')">Alert {{type}}</h1>
+    <h1 (click)="output.next('danger')" style="color: orange">Alert {{type}}</h1>
   `,
 })
-export class AlertComponent implements OnInit {
-  @Input() type: string = "success";
+export class DangerAlertComponent implements IAlertComponent {
+  @Input() type: string = 'danger';
   @Output() output = new EventEmitter();
-  
-  constructor(){console.warn('constructor');}
-  public ngOnInit(){console.warn('constructor');}
+}
+
+@Component({
+  selector: 'success-alert',
+  template: `
+    <h1 (click)="output.next('success')" style="color: green">Alert {{type}}</h1>
+  `,
+})
+export class SuccessAlertComponent implements IAlertComponent{
+  @Input() type: string = 'success';
+  @Output() output = new EventEmitter();
 }
 
 
 @Component({
-  selector: 'my-app',
+  selector: 'app-root',
   template: `
     <template #alertContainer></template>
-    <button (click)="createComponent('success')">Create success alert</button>
-    <button (click)="createComponent('danger')">Create danger alert</button>
+    <button (click)="createComponent('success', components.success)">Create success alert</button>
+    <button (click)="createComponent('danger', components.danger)">Create danger alert</button>
   `,
 })
 export class App {
- @ViewChild("alertContainer", { read: ViewContainerRef }) container;
- componentRef: ComponentRef;
+ @ViewChild("alertContainer", { read: ViewContainerRef, static: false })
+  container: ViewContainerRef;
+
+  componentRef: ComponentRef<IAlertComponent>;
+
+  components = {
+    success: SuccessAlertComponent,
+    danger: DangerAlertComponent
+  }
  
   constructor(private resolver: ComponentFactoryResolver) {}
   
-  createComponent(type) {
+  createComponent(type: string, component: Type<IAlertComponent>) {
     this.container.clear();
-    const factory: ComponentFactory = this.resolver.resolveComponentFactory(AlertComponent);
+    const factory: ComponentFactory<IAlertComponent> = this.resolver.resolveComponentFactory(component);
 
     this.componentRef = this.container.createComponent(factory);
     
@@ -53,8 +73,8 @@ export class App {
 
 @NgModule({
   imports: [ BrowserModule ],
-  declarations: [ App , AlertComponent],
-  g: [AlertComponent],
+  declarations: [ App , DangerAlertComponent, SuccessAlertComponent],
+  entryComponents: [DangerAlertComponent, SuccessAlertComponent],
   bootstrap: [ App ]
 })
 export class AppModule {}
