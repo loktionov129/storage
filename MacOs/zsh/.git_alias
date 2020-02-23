@@ -1,44 +1,32 @@
-unalias grs
-alias grs='git reset --soft HEAD^1'
+bind()
+{
+    aliasName=$1
+    command=$2
 
-unalias gca
-alias gca='git commit -v --no-edit --amend'
+    unalias $aliasName
+    alias $aliasName='$command' &> /dev/null
+}
 
-unalias gcam
-alias gcam='git commit -v --amend -m'
+bind gf 'git fetch --all --prune'
+bind gfa 'git fetch --all --prune'
+bind gpl 'git pull'
+bind gplo 'git pull origin $(git symbolic-ref --short HEAD)'
 
-unalias gc
-alias gc='git commit -m '
+bind gs 'git status'
 
-alias gpl='git pull'
-alias gplo='git pull origin $(git symbolic-ref --short HEAD)'
+bind ga 'git add .'
+bind gc 'git commit -m '
+bind gca 'git commit -v --no-edit --amend'
+bind gcam 'git commit -v --amend -m'
 
-unalias gp
-alias gp='git push'
+bind gp 'git push'
+bind gpo 'git push origin $(git symbolic-ref --short HEAD) --no-verify'
+bind gpn 'git push origin $(git symbolic-ref --short HEAD) --no-verify'
+bind gpfn 'git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
+bind gpnf 'git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
 
-unalias gpo
-alias gpo='git push origin $(git symbolic-ref --short HEAD) --no-verify'
+bind gd 'git diff'
+bind gl 'git log'
 
-unalias gn
-alias gpn='git push --no-verify'
-
-unalias gpfn
-alias gpfn='git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
-
-unalias gpnf
-alias gpnf='git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
-
-unalias ga
-alias ga='git add .'
-
-unalias gs
-alias gs='git status'
-
-unalias gd
-alias gd='git diff'
-
-unalias gl
-alias gl='git log'
-
-unalias gf
-alias gf='git fetch --all --prune'
+bind grs 'git reset --soft HEAD^1'
+bind grh 'git reset --hard HEAD^1'
