@@ -1,67 +1,29 @@
 {
-    "[javascript]": {
-      "editor.formatOnSave": true
-    },
-    "[json]": {
-      "editor.formatOnSave": true
-    },
-    "[todo]": {
-      "editor.tabSize": 4
-    },
-    "[typescript]": {
-      "editor.formatOnSave": true
-    },
-    "editor.detectIndentation": false,
-    "editor.formatOnSave": false,
-    "editor.insertSpaces": true,
-    "editor.matchBrackets": false,
-    "editor.tabSize": 4,
+    "terminal.integrated.automationShell.windows": "C:\\soft\\Git\\bin\\bash.exe",
+    "terminal.external.windowsExec": "C:\\soft\\Git\\bin\\bash.exe",
+    "terminal.integrated.shell.windows": "C:\\soft\\Git\\bin\\bash.exe",
+    "extensions.ignoreRecommendations": false,
     "explorer.confirmDelete": false,
     "files.autoSave": "afterDelay",
-    "files.exclude": {
-      "**/node_modules": true,
-      "node_modules": true
-    },
-    "stylelint.config": {
-      "extends": "./src/.stylelintrc/app.json"
-    },
-    "todo.file": ".ToDo",
-    "todo.indentation": "    ",
-    "todo.statistics.project.text": "([pending])  [done]/[cancelled]/[finished]",
-    "todo.statistics.statusbar.command": "todo.openEmbedded",
-    "todo.tags.backgroundColors": [
-      "#45ff45",
-      "#7777ff",
-      "#aaaaaa",
-      "#ae81ff",
-      "#e54545",
-      "#e59f45",
-      "#e5d145",
-      "#ffffff"
-    ],
-    "todo.tags.foregroundColors": [
-      "#000000",
-      "#000000",
-      "#000000",
-      "#000000",
-      "#000000",
-      "#000000",
-      "#000000",
-      "#000000"
-    ],
-    "todo.tags.names": [
-      "bug",
-      "chore",
-      "critical",
-      "feature",
-      "high",
-      "low",
-      "refactoring",
-      "today"
-    ],
-    "todo.timekeeping.created.enabled": true,
-    "todo.timekeeping.created.format": "YY-MM-DD HH:mm:ss",
-    "todo.timekeeping.finished.format": "YY-MM-DD HH:mm:ss",
-    "todo.timekeeping.started.format": "YY-MM-DD HH:mm:ss",
-    "typescript.reportStyleChecksAsWarnings": true
-  }
+    "[javascript]": {
+        "editor.formatOnSave": true
+      },
+      "[json]": {
+        "editor.formatOnSave": true
+      },
+      "[todo]": {
+        "editor.tabSize": 4
+      },
+      "[typescript]": {
+        "editor.formatOnSave": true
+      },
+      "editor.detectIndentation": false,
+      "editor.formatOnSave": false,
+      "editor.insertSpaces": true,
+      "editor.matchBrackets": "never",
+      "editor.tabSize": 4,
+      "files.exclude": {
+        "**/node_modules": true,
+        "node_modules": true
+      },
+}
