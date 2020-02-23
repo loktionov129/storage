@@ -8,22 +8,33 @@ unalias gcam
 alias gcam='git commit -v --amend -m'
 
 unalias gc
-alias gc='git commit -m $(git symbolic-ref --short HEAD) -m'
-#alias gc='git commit -m'
+alias gc='git commit -m '
 
 alias gpl='git pull'
 alias gplo='git pull origin $(git symbolic-ref --short HEAD)'
 
+unalias gp
 alias gp='git push'
+
+unalias gpo
 alias gpo='git push origin $(git symbolic-ref --short HEAD) --no-verify'
+
+unalias gn
 alias gpn='git push --no-verify'
+
+unalias gpfn
 alias gpfn='git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
+
+unalias gpnf
 alias gpnf='git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
 
 unalias ga
 alias ga='git add .'
 
+unalias gs
 alias gs='git status'
+
+unalias gd
 alias gd='git diff'
 
 unalias gl
