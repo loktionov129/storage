@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 bind()
 {
     unalias $1 &> /dev/null
@@ -8,6 +10,9 @@ bind gf 'git fetch --all --prune'
 bind gfa 'git fetch --all --prune'
 bind gpl 'git pull'
 bind gplo 'git pull origin $(git symbolic-ref --short HEAD)'
+
+bind gco 'git checkout'
+bind gcb 'git checkout -b'
 
 bind gs 'git status'
 
