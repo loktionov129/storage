@@ -1,0 +1,10 @@
+<application>
+  <component name="InlayHintsSettings">
+    <option name="disabledHintProviderIds">
+      <set>
+        <option value="TypeScript.ts.chain.hints" />
+        <option value="TypeScript.ts.type.hints" />
+      </set>
+    </option>
+  </component>
+</application>
