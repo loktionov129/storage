@@ -22,7 +22,7 @@ bind gca 'git commit -v --no-edit --amend'
 bind gcam 'git commit -v --amend -m'
 
 bind gp 'git push'
-bind gpo 'git push origin $(git symbolic-ref --short HEAD) --no-verify'
+bind gpo 'git push origin $(git symbolic-ref --short HEAD)'
 bind gpn 'git push origin $(git symbolic-ref --short HEAD) --no-verify'
 bind gpfn 'git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
 bind gpnf 'git push origin $(git symbolic-ref --short HEAD) --no-verify --force'
