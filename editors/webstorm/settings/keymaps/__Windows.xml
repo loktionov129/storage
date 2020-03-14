@@ -2,6 +2,9 @@
   <action id="$Redo">
     <keyboard-shortcut first-keystroke="ctrl y" />
   </action>
+  <action id="CloseContent">
+    <keyboard-shortcut first-keystroke="ctrl w" />
+  </action>
   <action id="CommentByBlockComment">
     <keyboard-shortcut first-keystroke="alt slash" />
   </action>
@@ -12,9 +15,7 @@
     <keyboard-shortcut first-keystroke="ctrl y" />
   </action>
   <action id="EditorDeleteLine" />
-  <action id="EditorDuplicate">
-    <keyboard-shortcut first-keystroke="meta d" />
-  </action>
+  <action id="EditorSelectWord" />
   <action id="GotoLine" />
   <action id="Graph.ActualSize">
     <keyboard-shortcut first-keystroke="ctrl divide" />
