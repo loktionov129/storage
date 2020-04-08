@@ -1,0 +1,9 @@
+### How to enable it?
+
+As the debugger is experimental for now, you need to explicitly turn it on to use it.
+
+Call up the Maintenance dialog (Shift+Ctrl+Alt+/ on Linux/Windows, ⌥⇧⌘/ on macOS) | Experimental features
+
+And select cidr.debugger.lldb.windows to control it.
+
+cidr.debugger.lldb.windows
