@@ -8,7 +8,7 @@ bind()
 
 bind gf 'git fetch --all --prune'
 bind gfa 'git fetch --all --prune'
-bind gpl 'git pull'
+bind gpl 'git pull origin $(git symbolic-ref --short HEAD)'
 bind gplo 'git pull origin $(git symbolic-ref --short HEAD)'
 
 bind gco 'git checkout'
@@ -17,6 +17,7 @@ bind gcb 'git checkout -b'
 bind gs 'git status'
 
 bind ga 'git add .'
+#bind gc 'sh -c '\''git commit -m "$(git symbolic-ref --short HEAD)" -m "$*"'\'' _'
 bind gc 'git commit -m '
 bind gca 'git commit -v --no-edit --amend'
 bind gcam 'git commit -v --amend -m'
