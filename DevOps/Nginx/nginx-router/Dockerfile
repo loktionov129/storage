@@ -1,4 +1,4 @@
-FROM nginx:alpine
+FROM nginx:stable-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # support running as arbitrary user which belogs to the root group
