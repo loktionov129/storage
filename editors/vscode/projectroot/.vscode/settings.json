@@ -1,0 +1,29 @@
+{
+    "terminal.integrated.automationShell.windows": "C:\\soft\\Git\\bin\\bash.exe",
+    "terminal.external.windowsExec": "C:\\soft\\Git\\bin\\bash.exe",
+    "terminal.integrated.shell.windows": "C:\\soft\\Git\\bin\\bash.exe",
+    "extensions.ignoreRecommendations": false,
+    "explorer.confirmDelete": false,
+    "files.autoSave": "afterDelay",
+    "[javascript]": {
+        "editor.formatOnSave": true
+      },
+      "[json]": {
+        "editor.formatOnSave": true
+      },
+      "[todo]": {
+        "editor.tabSize": 4
+      },
+      "[typescript]": {
+        "editor.formatOnSave": true
+      },
+      "editor.detectIndentation": false,
+      "editor.formatOnSave": false,
+      "editor.insertSpaces": true,
+      "editor.matchBrackets": "never",
+      "editor.tabSize": 4,
+      "files.exclude": {
+        "**/node_modules": true,
+        "node_modules": true
+      },
+}

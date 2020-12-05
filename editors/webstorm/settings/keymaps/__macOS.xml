@@ -1,0 +1,30 @@
+<keymap version="1" name="__macOS" parent="Mac OS X 10.5+">
+  <action id="$Redo">
+    <keyboard-shortcut first-keystroke="meta y" />
+  </action>
+  <action id="CollapseSelection" />
+  <action id="CommentByBlockComment">
+    <keyboard-shortcut first-keystroke="alt slash" />
+  </action>
+  <action id="CommentByLineComment">
+    <keyboard-shortcut first-keystroke="meta slash" />
+  </action>
+  <action id="Editor Redo">
+    <keyboard-shortcut first-keystroke="meta y" />
+  </action>
+  <action id="EditorDuplicate">
+    <keyboard-shortcut first-keystroke="meta d" />
+  </action>
+  <action id="FindNext" />
+  <action id="HippieCompletion" />
+  <action id="MoveLineUp">
+    <keyboard-shortcut first-keystroke="meta t" />
+  </action>
+  <action id="QuickImplementations">
+    <keyboard-shortcut first-keystroke="alt space" />
+  </action>
+  <action id="SelectInProjectView">
+    <keyboard-shortcut first-keystroke="meta g" />
+  </action>
+  <action id="Vcs.UpdateProject" />
+</keymap>
