@@ -11,7 +11,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Samples">
 
-        <activity android:name=".ImageCarousel">
+        <activity android:name=".ListViewDemo">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
