@@ -45,12 +45,19 @@ Y
 
 ## Disks
 ```
+pacman -Syu
+cd /tmp
+pacman -S wget
+wget https://raw.githubusercontent.com/loktionov129/storage/master/Linux/i_use_ARCH_btw/1disks.sh
+sed -i 's/\r$//' ./1disks.sh
 chmod +x ./1disks.sh
 ./1disks.sh sda1 sda2
 ```
 
 ## Installation
 ```
+wget https://raw.githubusercontent.com/loktionov129/storage/master/Linux/i_use_ARCH_btw/2installation.sh
+sed -i 's/\r$//' ./2installation.sh
 chmod +x ./2installation.sh
 ./2installation.sh
 ```
@@ -59,6 +66,9 @@ chmod +x ./2installation.sh
 ```
 arch-chroot /mnt
 
+cd /tmp
+wget https://raw.githubusercontent.com/loktionov129/storage/master/Linux/i_use_ARCH_btw/3configuring.sh
+sed -i 's/\r$//' ./3configuring.sh
 chmod +x ./3configuring.sh
 ./3configuring.sh admin password root password
 
@@ -80,6 +90,9 @@ reboot
 
 # Login and configure the system again [3]
 ```
+cd /tmp
+wget https://raw.githubusercontent.com/loktionov129/storage/master/Linux/i_use_ARCH_btw/4configuring.sh
+sed -i 's/\r$//' ./4configuring.sh
 chmod +x ./4configuring.sh
 ./4configuring.sh
 reboot
