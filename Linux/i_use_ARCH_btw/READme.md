@@ -95,21 +95,14 @@ wget https://raw.githubusercontent.com/loktionov129/storage/master/Linux/i_use_A
 sed -i 's/\r$//' ./4configuring.sh
 chmod +x ./4configuring.sh
 ./4configuring.sh
+
+echo "https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting"
+echo "Create pacman hook for nvidia"
+
 reboot
 ```
 
 # Login and configure the system again [4]
 ```
-paru -S zramd
-sudo systemctl enable --now zramd.service
-lsblk
-reboot
-```
-
-# Login and configure the system again [5]
-```
 neofetch
-
-echo "https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting"
-echo "Create pacman hook for nvidia"
 ```
