@@ -16,7 +16,7 @@ echo "::1       localhost" >> /etc/hosts
 echo "127.0.1.1 arch.localdomain arch" >> /etc/hosts
 echo $ROOT_LOGIN:$ROOT_PASSWORD | chpasswd
 
-# Install packages
+echo "Install packages"
 pacman -S base-devel linux-headers neofetch htop reflector
 pacman -S grub grub-btrfs efibootmgr
 pacman -S networkmanager network-manager-applet wpa_supplicant
@@ -24,11 +24,11 @@ pacman -S mtools dosfstools os-prober dialog
 pacman -S xdg-user-dirs xdg-utils cups hplip openssh rsync firewalld
 pacman -S alsa-utils pipewire pipewire-alsa pipewire-pulse pipewire-jack pavucontrol
 
-# Install GRUB as bootloader
+echo "Install GRUB as bootloader"
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Configure the system again [1]
+echo "Configure the system again [1]"
 gpg --refresh-keys
 pacman -Syu
 pacman-key --refresh-keys
