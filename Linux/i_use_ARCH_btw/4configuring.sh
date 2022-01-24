@@ -17,6 +17,6 @@ cd paru
 makepkg -si --noconfirm
 cd ..
 
-# screenlock system-backup\restore
+# system-backup\restore
 paru -S --noconfirm timeshift timeshift-autosnap nerd-fonts-jetbrains-mono
 sudo systemctl disable getty@tty2.service
