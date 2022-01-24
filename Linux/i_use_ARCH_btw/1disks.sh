@@ -3,7 +3,7 @@ DISK_MAIN=$2
 
 echo Format partitions
 mkfs.vfat /dev/$DISK_EFI
-mkfs.btrfs /dev/$DISK_MAIN
+mkfs.btrfs /dev/$DISK_MAIN -f
 
 echo Configure storage
 mount /dev/$DISK_MAIN /mnt
