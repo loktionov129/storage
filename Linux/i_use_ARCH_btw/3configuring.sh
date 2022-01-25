@@ -6,8 +6,12 @@ ROOT_PASSWORD=$4
 ln -sf /usr/share/zoneinfo/Asia/Krasnoyarsk /etc/localtime
 hwclock --systohc
 sed -i '177s/.//' /etc/locale.gen
+sed -n 177p /etc/locale.gen
+sed -i '403s/.//' /etc/locale.gen
+sed -n 403p /etc/locale.gen
 cat /etc/locale.gen | grep en_US
-echo "Ensure that en_US.UTF-8 is uncommented"
+cat /etc/locale.gen | grep ru_RU
+echo "Ensure that en_US.UTF-8 AND ru_RU.UTF-8 is uncommented"
 locale-gen
 echo "LANG=en_US.UTF-8" >> /etc/locale.conf
 echo "arch" >> /etc/hostname
