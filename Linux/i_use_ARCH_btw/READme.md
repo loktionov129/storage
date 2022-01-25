@@ -61,6 +61,8 @@ chmod +x ./2installation.sh
 ```
 arch-chroot /mnt
 
+echo "Enable multilib in /etc/pacman.conf"
+nano /etc/pacman.conf
 cd /tmp
 wget https://raw.githubusercontent.com/loktionov129/storage/master/Linux/i_use_ARCH_btw/3configuring.sh
 sed -i 's/\r$//' ./3configuring.sh
