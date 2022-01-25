@@ -96,7 +96,6 @@ chmod +x ./4configuring.sh
 
 echo "https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting"
 echo "Create pacman hook for nvidia"
-echo "Enable multilib in /etc/pacman.conf"
 
 reboot
 ```
