@@ -29,10 +29,10 @@ grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 grub-mkconfig -o /boot/grub/grub.cfg
 
 echo "Configure the system again [1]"
-gpg --refresh-keys
+timeout 300 gpg --refresh-keys
 pacman -Syu
-pacman-key --refresh-keys
-pacman -S gnome
+timeout 300 pacman-key --refresh-keys
+pacman -S gnome gnome-extra
 pacman -S --noconfirm nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader lib32-opencl-nvidia opencl-nvidia libxnvctrl 
 pacman -S --noconfirm lib32-mesa vulkan-intel lib32-vulkan-intel vulkan-icd-loader lib32-vulkan-icd-loader libva-intel-driver xf86-video-intel
 systemctl enable gdm
