@@ -76,7 +76,7 @@ reboot
 ```
 # if btrFS used on 2 disks - put "btrfs" parameter in MODULES
 # if amd or nvidia card is used - put "amdgpu" or "nvidia" parameters in MODULES accordingly
-# (btrfs nvidia nvidia_modeset nvidia_uvm nvidia_drm)
+# (crc32c libcrc32c zlib_deflate btrfs nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 # if config was changed, recreate initramfs:
 
 nano /etc/mkinitcpio.conf
