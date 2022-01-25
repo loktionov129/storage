@@ -15,30 +15,25 @@ o
 y
 ```
 ## Add a new EFI partition
+```
 n
-### Partition number (default: 1)
-### First sector memory (default: 2048)
-### Last sector memory
-```
+# Partition number (default: 1)
+# First sector memory (default: 2048)
+# Last sector memory
 +550M
-```
-### Hex code or GUID
-```
+# Hex code or GUID
 ef00
 ```
 ## Add a new MAIN partition
 ```
 n
-```
-### Partition number (default: 2)
-### First sector memory (default)
-### Last sector memory
-```
+
+# Partition number (default: 2)
+# First sector memory (default)
+# Last sector memory
 -2G
-```
-### Hex code or GUID (default: 8300)
-### Write table to disk and exit
-```
+# Hex code or GUID (default: 8300)
+# Write table to disk and exit
 w
 Y
 ```
