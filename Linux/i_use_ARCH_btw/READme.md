@@ -78,11 +78,12 @@ reboot
 ```
 
 # Login and configure the system again [2]
-## if btrFS used on 2 disks - put "btrfs" parameter in MODULES
-## if amd or nvidia card is used - put "amdgpu" or "nvidia" parameters in MODULES accordingly
-## (btrfs nvidia nvidia_modeset nvidia_uvm nvidia_drm)
-## if config was changed, recreate initramfs:
 ```
+# if btrFS used on 2 disks - put "btrfs" parameter in MODULES
+# if amd or nvidia card is used - put "amdgpu" or "nvidia" parameters in MODULES accordingly
+# (btrfs nvidia nvidia_modeset nvidia_uvm nvidia_drm)
+# if config was changed, recreate initramfs:
+
 nano /etc/mkinitcpio.conf
 mkinitcpio -p linux
 reboot
@@ -98,6 +99,7 @@ chmod +x ./4configuring.sh
 
 echo "https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting"
 echo "Create pacman hook for nvidia"
+echo "Enable multilib in /etc/pacman.conf"
 
 reboot
 ```
