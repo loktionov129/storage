@@ -73,7 +73,7 @@ chmod +x ./3configuring.sh
 ./3configuring.sh admin password root password
 
 exit
-umount -a
+umount -R /mnt
 reboot
 ```
 
