@@ -103,4 +103,6 @@ reboot
 # Login and configure the system again [4]
 ```
 neofetch
+
+echo "change region formats via settings, windows titlebars via tweaks, dark theme and etc..."
 ```
