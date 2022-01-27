@@ -114,6 +114,8 @@ ln -s /usr/share/steam/compatibilitytools.d/proton-ge-custom/files ~/.local/shar
 ln -s ~/.local/share/Steam/steamapps/common/Proton\ 6.3/dist ~/.local/share/lutris/runners/wine/Proton\ 6.3
 
 echo "manage wine versions via lutris, add latest protons"
+echo "configure lutris runner options: disable mouse war override, enable audio driver=pulseaudio"
+echo "configure lutris system options: enable restore resolution+gamma on game exit, disable desktop effects, disable screensaver, set vulkan icd=nvidia, enable feral gamemode, env vars - MANGOHUD=1"
 
 nano ~/.config/MangoHud/MangoHud.conf
 cpu_temp
