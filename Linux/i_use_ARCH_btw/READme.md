@@ -124,3 +124,13 @@ fps_limit=100
 or fps_limit=144
 or fps_limit=240
 ```
+
+https://github.com/lutris/lutris
+https://github.com/Castro-Fidel/PortWINE
+https://github.com/GloriousEggroll/proton-ge-custom
+https://github.com/ValveSoftware/Proton
+https://github.com/FeralInteractive/gamemode
+https://github.com/flightlessmango/MangoHud
+
+https://github.com/ventureoo/ARU
+
