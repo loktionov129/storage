@@ -14,9 +14,9 @@ btrfs subvolume create @var
 cd
 umount /mnt
 
-mount -o noatime,compress=zstd,space_cache=v2,discard=async,subvol=@ /dev/$DISK_MAIN /mnt
+mount -o ssd,noatime,compress=zstd,space_cache=v2,discard=async,subvol=@ /dev/$DISK_MAIN /mnt
 mkdir -p /mnt/boot/efi
 mkdir /mnt/{home,var}
-mount -o noatime,compress=zstd,space_cache=v2,discard=async,subvol=@home /dev/$DISK_MAIN /mnt/home
-mount -o noatime,compress=zstd,space_cache=v2,discard=async,subvol=@var /dev/$DISK_MAIN /mnt/var
+mount -o ssd,noatime,compress=zstd,space_cache=v2,discard=async,subvol=@home /dev/$DISK_MAIN /mnt/home
+mount -o ssd,noatime,compress=zstd,space_cache=v2,discard=async,subvol=@var /dev/$DISK_MAIN /mnt/var
 mount /dev/$DISK_EFI /mnt/boot/efi
