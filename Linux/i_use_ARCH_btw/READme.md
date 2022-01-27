@@ -105,4 +105,18 @@ reboot
 neofetch
 
 echo "change region formats via settings, windows titlebars via tweaks, dark theme and etc..."
+
+paru -S lutris wine-staging gamemode lib32-gamemode mangohud lib32-mangohud steam
+paru -S proton-ge-custom − ставится долго.
+
+ln -s /usr/share/steam/compatibilitytools.d/proton-ge-custom/files ~/.local/share/lutris/runners/wine/proton-ge-custom
+ln -s ~/.local/share/Steam/steamapps/common/Proton\ 6.3/dist ~/.local/share/lutris/runners/wine/Proton\ 6.3
+
+
+nano ~/.config/MangoHud/MangoHud.conf
+cpu_temp
+gpu_temp
+fps_limit=100
+or fps_limit=144
+or fps_limit=240
 ```
