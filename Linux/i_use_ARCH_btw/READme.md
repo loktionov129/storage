@@ -107,6 +107,7 @@ neofetch
 echo "change region formats via settings, windows titlebars via tweaks, dark theme and etc..."
 
 paru -S lutris wine-staging gamemode lib32-gamemode mangohud lib32-mangohud steam
+steam --->> settings --> steam play --> enable proton
 paru -S proton-ge-custom − ставится долго.
 
 ln -s /usr/share/steam/compatibilitytools.d/proton-ge-custom/files ~/.local/share/lutris/runners/wine/proton-ge-custom
