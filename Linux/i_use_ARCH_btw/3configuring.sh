@@ -38,6 +38,7 @@ pacman -Syu
 pacman -S gnome gnome-extra gnome-software gnome-tweaks
 pacman -S --noconfirm nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings vulkan-icd-loader lib32-vulkan-icd-loader lib32-opencl-nvidia opencl-nvidia libxnvctrl 
 pacman -S --noconfirm lib32-mesa vulkan-intel lib32-vulkan-intel vulkan-icd-loader lib32-vulkan-icd-loader libva-intel-driver xf86-video-intel
+pacman -S --noconfirm xorg-xwayland qt5-wayland firefox-developer-edition
 systemctl enable gdm
 systemctl enable NetworkManager
 systemctl enable cups.service
