@@ -124,6 +124,18 @@ or fps_limit=144
 or fps_limit=240
 ```
 
+# Multiple kernels
+```
+sudo pacman -S linux-lts linux-lts-headers linux-zen linux-zen-headers
+
+sudo nano /etc/default/grub
+GRUB_DEFAULT=saved
+GRUB_SAVEDEFAULT=true
+GRUB_DISABLE_SUBMENU=y
+
+sudo grub-mkconfig -o /boot/grub/grub.cfg
+```
+
 ---
 https://github.com/lutris/lutris
 ---
