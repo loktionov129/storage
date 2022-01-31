@@ -126,14 +126,10 @@ or fps_limit=240
 
 # Multiple kernels
 ```
-sudo pacman -S linux-lts linux-lts-headers linux-zen linux-zen-headers
-
-sudo nano /etc/default/grub
-GRUB_DEFAULT=saved
-GRUB_SAVEDEFAULT=true
-GRUB_DISABLE_SUBMENU=y
-
-sudo grub-mkconfig -o /boot/grub/grub.cfg
+sudo pacman -S grub-customizer linux-lts linux-lts-headers linux-zen linux-zen-headers
+cd ~/Projects
+git clone https://github.com/AdisonCavani/distro-grub-themes
+echo "open grub customizer, goto appearance, set theme=arch, set custom_resolution=2560x1440;goto list config, rename menus;goto general settings, set predefined=zen;goto advanced settings,make sure GRUB_DEFAULT=zen & GRUB_SAVEDEFAULT=false & GRUB_DISABLE_SUBMENU=y;save grub config via APP GRUB CUSTOMIZER"
 ```
 
 ---
