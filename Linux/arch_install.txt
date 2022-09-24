@@ -1,0 +1,100 @@
+# Update the system clock
+timedatectl set-ntp true
+
+# Partition the disks
+lsblk
+fdisk -l
+gdisk /dev/sda
+## Create a new empty GUID partition table (GPT)
+o
+y
+## Add a new EFI partition
+n
+### Partition number (default: 1)
+### First sector memory (default: 2048)
+### Last sector memory
++550M
+### Hex code or GUID
+ef00
+## Add a new MAIN partition
+n
+### Partition number (default: 2)
+### First sector memory (default)
+### Last sector memory
+-2G
+### Hex code or GUID (default: 8300)
+### Write table to disk and exit
+w
+Y
+
+## Format partitions
+mkfs.vfat /dev/sda1
+mkfs.btrfs /dev/sda2
+
+## Configure storage
+mount /dev/sda2 /mnt
+cd /mnt
+btrfs subvolume create @
+btrfs subvolume create @home
+btrfs subvolume create @var
+cd
+umount /mnt
+mount -o noatime,compress=zstd,space_cache=v2,discard=async,subvol=@ /dev/sda2 /mnt
+mkdir -p /mnt/boot/efi
+mkdir /mnt/{home,var}
+mount -o noatime,compress=zstd,space_cache=v2,discard=async,subvol=@home /dev/sda2 /mnt/home
+mount -o noatime,compress=zstd,space_cache=v2,discard=async,subvol=@var /dev/sda2 /mnt/var
+mount /dev/sda1 /mnt/boot/efi
+
+## Installation (intel-ucode for intel OR amd-ucode for amd)
+pacstrap /mnt base linux linux-firmware git vim nano intel-ucode btrfs-progs
+
+
+## Configure the system
+genfstab -U /mnt >> /mnt/etc/fstab
+arch-chroot /mnt
+ln -sf /usr/share/zoneinfo/Asia/Krasnoyarsk /etc/localtime
+hwclock --systohc
+### Edit /etc/locale.gen and uncomment en_US.UTF-8 UTF-8
+nano
+locale-gen
+echo "LANG=en_US.UTF-8" >> /etc/locale.conf
+echo "arch" >> /etc/hostname
+echo "127.0.0.1 localhost" >> /etc/hosts
+echo "::1       localhost" >> /etc/hosts
+echo "127.0.1.1 arch.localdomain arch" >> /etc/hosts
+echo root:password | chpasswd
+
+## Install packages
+pacman -S base-devel linux-headers
+pacman -S grub grub-btrfs efibootmgr
+pacman -S networkmanager network-manager-applet wpa_supplicant
+pacman -S mtools dosfstools os-prober dialog reflector
+pacman -S xdg-user-dirs xdg-utils cups hplip openssh rsync firewalld
+pacman -S alsa-utils pipewire pipewire-alsa pipewire-pulse pipewire-jack pavucontrol
+
+
+# Install GRUB as bootloader
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+#grub-install --removable --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
+
+pacman -S --noconfirm nvidia nvidia-utils nvidia-settings
+systemctl enable NetworkManager
+systemctl enable cups.service
+systemctl enable reflector.timer
+systemctl enable fstrim.timer
+systemctl enable firewalld
+useradd -m admin
+echo admin:password | chpasswd
+echo "admin ALL=(ALL) ALL" >> /etc/sudoers.d/admin
+echo "QT_QPA_PLATFORM=wayland" >> /etc/environment
+echo "QT_QPA_PLATFORMTHEME=qt5ct" >> /etc/environment
+echo "MOZ_ENABLE_WAYLAND=1" >> /etc/environment
+echo "MOZ_WEBRENDER=1" >> /etc/environment
+echo "XDG_SESSION_TYPE=wayland" >> /etc/environment
+echo "XDG_CURRENT_DESKTOP=sway" >> /etc/environment
+exit
+umount -a
+reboot
+

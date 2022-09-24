@@ -1,0 +1,5 @@
+`pacman -Syy`
+Before Pac-Man install base devel inside chroot
+
+`pacman -S archlinux-keyring`
+Before pacstrap
