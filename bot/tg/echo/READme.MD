@@ -7,5 +7,5 @@
 1. Create bot via replit.com
 2. Set up two env vars (Secrets tab):  MY_BOT_TOKEN and MY_TG_ID
 3. Add new monitor via uptimerobot.com
-4. Configure it: type=http, url=<get url from replit>, interval=5min, alert_contact=you
+4. Configure it: type=http, url=YOUR_BOT_URL_FROM_REPLIT, interval=5min, alert_contact=you
 5. Profit!
