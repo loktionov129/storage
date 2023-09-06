@@ -1,6 +1,6 @@
 # Echo Telegram Bot
 ## Written in Python
-### The code was taken from an article on the [habr] (https://habr.com/ru/articles/709314/)
+### The code was taken from an article on the [habr](https://habr.com/ru/articles/709314/)
 ### Special thanks to @Vadim S. from comment bellow the article
 
 0. Register your bot via @BotFather on tg
