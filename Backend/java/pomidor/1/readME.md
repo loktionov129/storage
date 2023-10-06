@@ -12,3 +12,8 @@ Sample output
 {newOrderId: 1170,      newMailId: null,        newMessageId: 1636}
 {newOrderId: 1717,      newMailId: 1167,        newMessageId: 2198}
 ```
+https://dotnetfiddle.net/
+
+https://www.codeconvert.ai/csharp-to-java-converter
+
+https://www.onlinegdb.com/online_java_compiler
