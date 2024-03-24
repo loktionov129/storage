@@ -1,0 +1,33 @@
+# cmd
+`#slmgr /skms `
+
+# regedit
+```
+PATH= \HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Services\TimeBrokerSvc
+NAME= Start
+NEW_VALUE= 4
+OLD_VALUE= 3
+```
+
+# cmd (ADMIN)
+Проверит все защищенные системные файлы и заменит поврежденные файлы их кэшированной копией
+```
+sfc /scannow
+```
+
+# cmd
+Enable the Ultimate Performance Power Plan
+```
+powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+```
+
+```
+GUID схемы питания: 381b4222-f694-41f0-9685-ff5bb260df2e  (Сбалансированная)
+GUID схемы питания: 55539a27-2591-497c-a094-9dd75c37e9b1  (Максимальная производительность) *
+GUID схемы питания: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (Высокая производительность)
+GUID схемы питания: a1841308-3541-4fab-bc81-f71556f20b4a  (Экономия энергии)
+```
+
+
+# debug
+`Панель управления\Все элементы панели управления\Центр безопасности и обслуживания\Монитор стабильности системы`
