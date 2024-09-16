@@ -26,13 +26,13 @@ UPDATE Employee SET grade = 'Ведущий специалист' WHERE id = 5;
 update Employee
 SET salary = CASE
 	WHEN id = 2 THEN 7::money
-    WHEN id = 3 THEN 80::money
-    ELSE salary
-	END,
+    	WHEN id = 3 THEN 80::money
+    	ELSE salary
+    END,
     grade = CASE
-    WHEN id = 3 THEN 'pomidor'
-    WHEN id = 5 THEN 'Ведущий специалист'
-    ELSE grade
+    	WHEN id = 3 THEN 'pomidor'
+    	WHEN id = 5 THEN 'Ведущий специалист'
+    	ELSE grade
     END;
 */
 
