@@ -23,7 +23,7 @@ pause
 GOTO End
 
 :NotRunning
-runas /user:lop /SAVECRED "G:\_lop\steam.exe"
+runas /user:lop /SAVECRED "C:\_xitriy\steam.exe"
 GOTO End
 
 :End
