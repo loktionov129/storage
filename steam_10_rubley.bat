@@ -19,6 +19,7 @@ FOR /F %%x IN ('tasklist /NH /FI "IMAGENAME eq %konkyrent%"') DO IF %%x == %konk
 
 :Running
 ECHO %konkyrent% is Running
+TASKKILL /f /im %konkyrent%
 pause
 GOTO End
 
