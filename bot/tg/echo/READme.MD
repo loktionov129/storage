@@ -13,8 +13,8 @@
 ## Preparing your environment
 ```bash
 py -m pip venv venv
-echo MY_BOT_TOKEN=REPLACE_ME >> ./.env
-echo MY_TG_ID=REPLACE_ME >> ./.env
+echo export MY_BOT_TOKEN=REPLACE_ME >> ./.env
+echo export MY_TG_ID=REPLACE_ME >> ./.env
 ```
 
 ## Install dependencies
