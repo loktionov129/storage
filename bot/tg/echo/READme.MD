@@ -17,14 +17,14 @@ py -m pip venv venv
 
 ## Install dependencies
 ```bash
-#py -m venv ./venv/Scripts/activate
-py -m venv ./venv/bin/activate
+# source ./venv/Scripts/activate
+source ./venv/bin/activate
 py -m pip install -r requirements.txt
 ```
 
 ## Run a program
 ```bash
-#py -m venv ./venv/Scripts/activate
-py -m venv ./venv/bin/activate
+# source ./venv/Scripts/activate
+source ./venv/bin/activate
 py ./main.py
 ```
