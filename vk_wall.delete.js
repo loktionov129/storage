@@ -17,7 +17,7 @@ async function deletePost(id)
         "body": "owner_id=12313123131312312312313123131313&post_id="+id+"&access_token=12313123131312312312313123131313",
         "method": "POST",
     });
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 500));
 }
 var posts =
 ["сюда", "подставляем", "список", "идентификаторов", "постов"]
