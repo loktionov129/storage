@@ -1,0 +1,5 @@
+## Interface: 30300
+## Author: loktionov129
+## Title: CopyRaidMembersNames
+## Notes: Копирует ники всех членов рейда (команда в чат /crmn)
+CopyRaidMembersNames.lua 
