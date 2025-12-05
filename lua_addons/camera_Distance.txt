@@ -1,0 +1,2 @@
+ /console CameraDistanceMaxFactor 5
+ /script SetCVar ("cameraDistancemax" ,50)
