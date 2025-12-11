@@ -1,6 +1,7 @@
 ## Interface: 30300
-## Author: Santiago
+## Author: loktionov129
 ## Title: GlobalFriendsList
 ## Notes: Позволяет синхронизировать список друзей между вашими персонажами (команда в чат /gfl)
 ## SavedVariables: GlobalFriendsList
+
 GlobalFriendsList.lua 
