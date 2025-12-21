@@ -1,0 +1,13 @@
+## Interface: 30300
+## Author: Santiago
+## Title: HuntersTrackify
+## Version: 1.0
+## Notes: Automatically switches tracking based on target.
+## Notes-ruRU: Позволяет выслеживать конкретных существ для реализация таланта "Мастерское выслеживание" из ветки выживание
+
+Locale\enUS.lua
+Locale\ruRU.lua
+HuntersTrackify.lua 
+
+
+
