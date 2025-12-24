@@ -1,9 +1,0 @@
-<resources>
-    <string name="app_name">Samples</string>
-    <string name="fill_form">Fill Form</string>
-    <string name="your_data">Your data:</string>
-    <string name="login">Login:</string>
-    <string name="password">Password:</string>
-    <string name="complete">complete</string>
-    <string name="number_from_prev_screen">Number from previous Screen: </string>
-</resources>

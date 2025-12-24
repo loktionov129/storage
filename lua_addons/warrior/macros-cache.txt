@@ -1,0 +1,134 @@
+MACRO 16777219 " " INV_Misc_QuestionMark
+#showtooltip Удар щитом
+/startattack
+/equipslot 17 Стена ужаса
+/equipslot 16 Последний смешок
+/use Удар щитом
+END
+MACRO 16777220 " " INV_Misc_QuestionMark
+#showtooltip Разоружение
+/startattack
+/use [nostance:2] Оборонительная стойка
+/use [stance:2] Разоружение
+END
+MACRO 16777221 " " INV_Misc_QuestionMark
+#showtooltip
+/startattack
+/use Кровопускание
+/equipslot 16 Последний смешок
+/equipslot 17 Тактический колун надзирателя
+/use 10
+/use Костяной щит
+END
+MACRO 16777222 " " INV_Misc_QuestionMark
+#showtooltip
+/startattack
+/use Превосходство
+/click MultiBarBottomLeftButton11
+/equipslot 16 Последний смешок
+/equipslot 17 Тактический колун надзирателя
+/use 10
+/use Костяной щит
+END
+MACRO 16777223 " " INV_Misc_QuestionMark
+#showtooltip
+/startattack
+/use Смертельный удар
+/click MultiBarBottomLeftButton11
+/equipslot 16 Последний смешок
+/equipslot 17 Тактический колун надзирателя
+/use 10
+/use Костяной щит
+END
+MACRO 16777224 " " INV_Misc_QuestionMark
+#showtooltip
+/startattack
+/use Казнь
+/click MultiBarBottomLeftButton11
+/equipslot 16 Последний смешок
+/equipslot 17 Тактический колун надзирателя
+/use 10
+/use Костяной щит
+END
+MACRO 16777225 " " INV_Misc_QuestionMark
+#showtooltip Сокрушительный бросок
+/use Боевая стойка
+END
+MACRO 16777226 " " INV_Misc_QuestionMark
+#showtooltip
+/startattack
+/use Кровожадность
+/equipslot 16 Последний смешок
+/equipslot 17 Тактический колун надзирателя
+/use 10
+/use Костяной щит
+END
+MACRO 16777236 " " INV_Misc_QuestionMark
+#showtooltip Вмешательство
+/use [nostance:2] Оборонительная стойка
+/use [@mouseover,mod] [@target,nomod,stance:2] Вмешательство
+END
+MACRO 16777228 " " INV_Misc_QuestionMark
+#showtooltip
+/use Устрашающий крик
+/stopattack
+END
+MACRO 16777229 " " INV_Misc_QuestionMark
+#showtooltip Отражение заклинания
+/startattack
+/equipslot 17 Стена ужаса
+/equipslot 16 Последний смешок
+/use Отражение заклинания
+END
+MACRO 16777231 " " INV_Misc_QuestionMark
+#showtooltip Глухая оборона
+/startattack
+/equipslot 17 Стена ужаса
+/equipslot 16 Последний смешок
+/use [nostance:2] Оборонительная стойка
+/use [stance:2] Глухая оборона
+END
+MACRO 16777232 " " INV_Misc_QuestionMark
+#showtooltip Блок щитом
+/startattack
+/equipslot 17 Стена ужаса
+/equipslot 16 Последний смешок
+/use [nostance:2] Оборонительная стойка
+/use [stance:2] Блок щитом
+END
+MACRO 16777233 " " INV_Misc_QuestionMark
+#showtooltip Безрассудство
+/use [nostance:3] Стойка берсерка
+/use [stance:3] Безрассудство
+END
+MACRO 16777234 " " INV_Misc_QuestionMark
+#showtooltip Реванш
+/startattack
+/equipslot 17 Стена ужаса
+/equipslot 16 Последний смешок
+/use Реванш
+/click MultiBarBottomLeftButton11
+/use 10
+/use Костяной щит
+END
+MACRO 16777235 " " INV_Misc_QuestionMark
+#showtooltip Мощный удар щитом
+/startattack
+/equipslot 17 Стена ужаса
+/equipslot 16 Последний смешок
+/use Мощный удар щитом
+/click MultiBarBottomLeftButton11
+/use 10
+/use Костяной щит
+END
+MACRO 16777237 "#" INV_Misc_QuestionMark
+#showtooltip
+/use [nomod] Удар грома; [mod:shift] Подрезать сухожилия; Раскол брони
+END
+MACRO 16777227 "#" INV_Misc_QuestionMark
+#showtooltip [mod:shift] Перехват; Рывок
+/use [nostance:3,mod:shift] Стойка берсерка
+/use [stance:3,mod:shift] Перехват
+/use [nostance:1,nomod:shift] Боевая стойка
+/use [stance:1,nomod:shift] Рывок 
+END

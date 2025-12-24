@@ -9,3 +9,23 @@
 3. Add new monitor via uptimerobot.com
 4. Configure it: type=http, url=YOUR_BOT_URL_FROM_REPLIT, interval=5min, alert_contact=you
 5. Profit!
+
+## Preparing your environment
+```bash
+py -m pip venv venv
+echo export MY_BOT_TOKEN=REPLACE_ME >> ./.env
+echo export MY_TG_ID=REPLACE_ME >> ./.env
+```
+
+## Install dependencies
+```bash
+# source ./venv/Scripts/activate
+source ./venv/bin/activate
+py -m pip install -r requirements.txt
+```
+
+## Run a program
+```bash
+source ./.env
+py ./main.py
+```

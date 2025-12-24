@@ -1,0 +1,59 @@
+MACRO 16777218 " " INV_Misc_QuestionMark
+#showtooltip Чародейские стрелы
+/use [nochanneling] Чародейские стрелы
+/cancelaura Ледяная глыба
+END
+MACRO 16777224 " " INV_Misc_QuestionMark
+#showtooltip Чародейский обстрел
+/use [nochanneling] Чародейский обстрел
+/cancelaura Ледяная глыба
+END
+MACRO 16777220 " " INV_Misc_QuestionMark
+#showtooltip
+/use Берсерк(Расовая, активная)
+/use Стылая кровь
+END
+MACRO 16777217 " " INV_Misc_QuestionMark
+#showtooltip [mounted] Берсерк;  [mod:ctrl] Защита от огня; [mod:alt] Защита от магии льда; [mod:shift] [nomod] Щит маны
+/stopmacro [mounted]
+/use [mod:ctrl] Защита от огня; [mod:alt] Защита от магии льда; [mod:shift] [nomod] Щит маны
+END
+MACRO 16777222 " " INV_Misc_QuestionMark
+#showtooltip
+/cancelaura Невидимость
+/use Невидимость
+END
+MACRO 16777221 " " INV_Misc_QuestionMark
+#showtooltip Просеивание
+/use Просеивание
+/use [btn:2] Саронитовая руда
+END
+MACRO 16777223 " " INV_Misc_QuestionMark
+#showtooltip
+/use [mod:alt] Ледяной доспех; [mod:shift] Магический доспех; Раскаленный доспех
+END
+MACRO 16777219 " " INV_Misc_QuestionMark
+#showtooltip Чародейская вспышка
+/use [nochanneling] Чародейская вспышка
+/cancelaura Ледяная глыба
+END
+MACRO 16777225 " " INV_Misc_QuestionMark
+#showtooltip Глубокая заморозка
+/use Глубокая заморозка
+/cancelaura Ледяная глыба
+END
+MACRO 16777226 " " INV_Misc_QuestionMark
+#showtooltip 
+/stopmacro [mounted]
+/use [mod:ctrl] Защита от огня; [mod:alt] Защита от магии льда; [mod:shift] Щит маны;   [nomod] Ледяная преграда
+END
+MACRO 16777227 " " INV_Misc_QuestionMark
+#showtooltip
+/use [pet] Холод; Призыв элементаля воды
+END
+MACRO 16777228 " " INV_Misc_QuestionMark
+#showtooltip
+/use Мощь тайной магии
+/use 13
+/use 14
+END
