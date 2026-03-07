@@ -1,0 +1,9 @@
+/run for b=0,4 do for s=1,C_Container.GetContainerNumSlots(b) do local info=C_Container.GetContainerItemInfo(b,s) if info then local q=info.quality if q and q > 3 then C_Container.UseContainerItem(b,s) end end end end
+
+— unEquip—
+/run for i=1,18 do ClearCursor() PickupInventoryItem(i) PutItemInBackpack() end
+
+
+
+— sell all—
+/run for b=0,4 do for s=1,GetContainerNumSlots(b) do local l=GetContainerItemLink(b,s) if l then UseContainerItem(b,s) end end end
