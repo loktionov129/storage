@@ -346,11 +346,13 @@ function getRootHashesSet(verbose) {
 }
 
 /**
- * Sequence editor: finds a *contiguous* block of `pick` lines matching this run (git-replay order).
- * With `--rebase-merges`, turning non-adjacent picks into `squash` makes Git fold into the wrong
- * parent; the rebase then “succeeds” without reducing commits → infinite outer loop.
- * If the chosen pick base is not the first line of that block (e.g. multiple roots), we reorder
- * the block so `pickHash` is first, then `squash` the rest in a safe wrap order.
+ * Sequence editor: prefers a *contiguous* block of `pick` lines matching this run (same order as
+ * `git log --reverse`). With `--rebase-merges`, those lines are often split by `label` / `merge` /
+ * `reset`, so no contiguous match exists. Then we fall back to legacy per-hash `pick`→`squash`
+ * (any matching line in the todo), which matches older script behavior; the main loop’s no-op
+ * guard catches cases where Git does not actually drop commits.
+ * When a contiguous block exists but the pick base is not first in file order, we reorder that
+ * block so the chosen base is `pick` and the rest are `squash` in original file order.
  */
 function writeSequenceTransformScript(tmpDir, orderedFullHashes, pickFullHash) {
   const ordered = orderedFullHashes.map((h) => h.toLowerCase());
@@ -386,11 +388,6 @@ for (let i = 0; i < lines.length; i += 1) {
   if (!m) continue;
   const full = resolveCommit(m[2]);
   if (full) picks.push({ i, abbrev: m[2], rest: m[3], full });
-}
-
-function fail(msg) {
-  console.error('[squash-history sequence editor] ' + msg);
-  process.exit(1);
 }
 
 if (ordered.length <= 1) {
@@ -429,28 +426,38 @@ for (let j = 0; j <= picks.length - ordered.length; j += 1) {
 }
 
 if (start < 0) {
-  fail(
-    'Could not find a contiguous pick block for this squash run (needed for rebase-merges). ' +
-      'Commits may be split across merge lanes; resolve manually or simplify merge structure.'
+  console.error(
+    '[squash-history sequence editor] No contiguous pick block (common with --rebase-merges). ' +
+      'Falling back to legacy per-hash pick→squash (may fold into the wrong parent for some merges).'
   );
-}
+  const firstLc = ordered[pickIx];
+  const squashSet = new Set(ordered.filter((_, i) => i !== pickIx));
+  const out = lines.map((line) => {
+    const m = pickRe.exec(line);
+    if (!m) return line;
+    const full = resolveCommit(m[2]);
+    if (!full || full === firstLc || !squashSet.has(full)) return line;
+    return 'squash ' + m[2] + m[3];
+  });
+  fs.writeFileSync(dest, out.join('\\n'));
+} else {
+  const n = ordered.length;
+  const p = pickIx;
+  const squashIdx = [];
+  for (let k = 0; k < n; k += 1) {
+    if (k !== p) squashIdx.push(k);
+  }
 
-const n = ordered.length;
-const p = pickIx;
-const squashIdx = [];
-for (let k = 0; k < n; k += 1) {
-  if (k !== p) squashIdx.push(k);
+  const blockStart = picks[start].i;
+  const blockEnd = picks[start + n - 1].i;
+  const newBlock = ['pick ' + picks[start + p].abbrev + picks[start + p].rest];
+  for (const k of squashIdx) {
+    const e = picks[start + k];
+    newBlock.push('squash ' + e.abbrev + e.rest);
+  }
+  const merged = lines.slice(0, blockStart).concat(newBlock, lines.slice(blockEnd + 1));
+  fs.writeFileSync(dest, merged.join('\\n'));
 }
-
-const blockStart = picks[start].i;
-const blockEnd = picks[start + n - 1].i;
-const newBlock = ['pick ' + picks[start + p].abbrev + picks[start + p].rest];
-for (const k of squashIdx) {
-  const e = picks[start + k];
-  newBlock.push('squash ' + e.abbrev + e.rest);
-}
-const merged = lines.slice(0, blockStart).concat(newBlock, lines.slice(blockEnd + 1));
-fs.writeFileSync(dest, merged.join('\\n'));
 `;
   return writeTempFile(tmpDir, 'seq-transform', body, '.js');
 }
