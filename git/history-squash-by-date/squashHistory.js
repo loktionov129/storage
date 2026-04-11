@@ -368,16 +368,70 @@ fs.writeFileSync(dest, out.join('\\n'));
   return writeTempFile(tmpDir, 'seq-transform', body, '.js');
 }
 
+function isAncestorOf(ancestor, descendant, verbose) {
+  if (ancestor === descendant) return true;
+  try {
+    runGit(['merge-base', '--is-ancestor', ancestor, descendant], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The commit that must stay `pick` is the graph-oldest in the run (ancestor of every other
+ * commit here). `git log --reverse` order follows topology but can still disagree with
+ * `%ai` grouping after partial rebases; using `commits[0]` alone can mark the real root as
+ * `squash` and trigger “cannot fixup root commit”.
+ */
+function resolvePickAndSquashHashes(run, verbose) {
+  const { commits } = run;
+  if (commits.length <= 1) {
+    return { firstHash: commits[0] ? commits[0].hash : null, squashTargets: [] };
+  }
+
+  for (const c of commits) {
+    const isOldest = commits.every(
+      (d) =>
+        d.hash.toLowerCase() === c.hash.toLowerCase() || isAncestorOf(c.hash, d.hash, verbose)
+    );
+    if (isOldest) {
+      const squashTargets = commits
+        .filter((d) => d.hash.toLowerCase() !== c.hash.toLowerCase())
+        .map((d) => d.hash);
+      if (verbose && commits[0].hash.toLowerCase() !== c.hash.toLowerCase()) {
+        console.error(
+          `[squash] pick base ${c.hash.slice(0, 7)} (graph-oldest), not log-first ${commits[0].hash.slice(0, 7)}`
+        );
+      }
+      return { firstHash: c.hash, squashTargets };
+    }
+  }
+
+  const firstHash = commits[0].hash;
+  const squashTargets = commits.slice(1).map((c) => c.hash);
+  if (verbose) {
+    console.error(
+      '[squash] warning: no commit in run is ancestor of all others; using log order for pick'
+    );
+  }
+  return { firstHash, squashTargets };
+}
+
 function squashOneRun(run, verbose, tmpDir) {
   const { commits } = run;
   if (commits.length <= 1) return;
 
-  const firstHash = commits[0].hash;
+  const { firstHash, squashTargets } = resolvePickAndSquashHashes(run, verbose);
+  if (!firstHash || squashTargets.length === 0) return;
+
   const topic = determineTopic(commits);
   const message = createSquashMessage(commits.length, run.period, topic);
 
   const { ontoArgs } = rebaseOntoArgs(firstHash, verbose);
-  const squashTargets = commits.slice(1).map((c) => c.hash);
 
   const msgPath = writeTempFile(tmpDir, 'squash-msg', `${message}\n`);
   const seqScript = writeSequenceTransformScript(tmpDir, squashTargets, firstHash);
