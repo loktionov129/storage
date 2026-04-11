@@ -354,13 +354,14 @@ function getRootHashesSet(verbose) {
  * When a contiguous block exists but the pick base is not first in file order, we reorder that
  * block so the chosen base is `pick` and the rest are `squash` in original file order.
  */
-function writeSequenceTransformScript(tmpDir, orderedFullHashes, pickFullHash) {
+function writeSequenceTransformScript(tmpDir, orderedFullHashes, pickFullHash, rootHashesLc) {
   const ordered = orderedFullHashes.map((h) => h.toLowerCase());
   const pickIx = ordered.indexOf(pickFullHash.toLowerCase());
   if (pickIx < 0) {
     throw new Error('Pick hash is not in this run commit list.');
   }
-  const cfg = { ordered, pickIx };
+  const roots = (rootHashesLc || []).map((h) => String(h).toLowerCase());
+  const cfg = { ordered, pickIx, roots };
   const body = `'use strict';
 const fs = require('fs');
 const { spawnSync } = require('child_process');
@@ -368,6 +369,7 @@ const cfg = ${JSON.stringify(cfg)};
 const dest = process.argv[process.argv.length - 1];
 const ordered = cfg.ordered;
 const pickIx = cfg.pickIx;
+const rootSet = new Set(cfg.roots || []);
 
 function resolveCommit(token) {
   const r = spawnSync('git', ['rev-parse', '--verify', token + '^{commit}'], {
@@ -437,6 +439,7 @@ if (start < 0) {
     if (!m) return line;
     const full = resolveCommit(m[2]);
     if (!full || full === firstLc || !squashSet.has(full)) return line;
+    if (rootSet.has(full)) return line;
     return 'squash ' + m[2] + m[3];
   });
   fs.writeFileSync(dest, out.join('\\n'));
@@ -453,7 +456,8 @@ if (start < 0) {
   const newBlock = ['pick ' + picks[start + p].abbrev + picks[start + p].rest];
   for (const k of squashIdx) {
     const e = picks[start + k];
-    newBlock.push('squash ' + e.abbrev + e.rest);
+    const cmd = rootSet.has(e.full) ? 'pick' : 'squash';
+    newBlock.push(cmd + ' ' + e.abbrev + e.rest);
   }
   const merged = lines.slice(0, blockStart).concat(newBlock, lines.slice(blockEnd + 1));
   fs.writeFileSync(dest, merged.join('\\n'));
@@ -565,14 +569,28 @@ function resolvePickAndSquashHashes(run, verbose) {
   return { firstHash, squashTargets };
 }
 
+/**
+ * @returns {boolean} true if an interactive rebase was started and finished; false if this run was skipped
+ */
 function squashOneRun(run, verbose, tmpDir) {
   const { commits } = run;
-  if (commits.length <= 1) return;
+  if (commits.length <= 1) return false;
 
   const { firstHash, squashTargets } = resolvePickAndSquashHashes(run, verbose);
-  if (!firstHash || squashTargets.length === 0) return;
+  if (!firstHash || squashTargets.length === 0) return false;
+
+  const roots = getRootHashesSet(verbose);
+  if (squashTargets.some((t) => roots.has(t.toLowerCase()))) {
+    console.warn(
+      `[squash] Skipping ${run.period}: Git cannot squash a second repository root (max-parents=0). ` +
+        'This often happens when the same calendar period produced two parallel squash commits under --rebase-merges. ' +
+        'Merge those commits into one line of history (or use a linear clone), then re-run this script.'
+    );
+    return false;
+  }
 
   const orderedFullHashes = commits.map((c) => c.hash);
+  const rootList = [...roots].map((h) => h.toLowerCase());
 
   const topic = determineTopic(commits);
   const message = createSquashMessage(commits.length, run.period, topic);
@@ -580,7 +598,7 @@ function squashOneRun(run, verbose, tmpDir) {
   const { ontoArgs } = rebaseOntoArgs(firstHash, verbose);
 
   const msgPath = writeTempFile(tmpDir, 'squash-msg', `${message}\n`);
-  const seqScript = writeSequenceTransformScript(tmpDir, orderedFullHashes, firstHash);
+  const seqScript = writeSequenceTransformScript(tmpDir, orderedFullHashes, firstHash, rootList);
   const msgScript = writeCopyEditorScript(tmpDir, msgPath);
   const sequenceEditorCmd = editorCommand(seqScript);
   const messageEditorCmd = editorCommand(msgScript);
@@ -599,6 +617,11 @@ function squashOneRun(run, verbose, tmpDir) {
     removeQuiet(seqScript);
     removeQuiet(msgScript);
   }
+  return true;
+}
+
+function squishableRunKey(run) {
+  return `${run.period}\0${run.commits.map((c) => c.hash).join('\0')}`;
 }
 
 async function confirmAction(message) {
@@ -679,21 +702,26 @@ async function squashHistory(strategy, verbose) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'squash-history-'));
   const totalSquashSteps = squishable.length;
   let step = 0;
+  const skippedRunKeys = new Set();
+  let skippedSegmentCount = 0;
 
   try {
     while (true) {
       commits = getCommitsOldestFirst(verbose);
       mergeSet = getMergeCommitSet(verbose);
       runs = buildRuns(commits, strategy, mergeSet);
-      const next = runs.find((r) => r.commits.length > 1);
+      const next = runs.find(
+        (r) => r.commits.length > 1 && !skippedRunKeys.has(squishableRunKey(r))
+      );
       if (!next) break;
 
       step += 1;
       console.log(`[${step}/${totalSquashSteps}] Processing ${next.period} (${next.commits.length} commits)`);
 
       const commitsBefore = gitRevListCount(verbose);
+      let didRebase = false;
       try {
-        squashOneRun(next, verbose, tmpDir);
+        didRebase = squashOneRun(next, verbose, tmpDir);
       } catch (e) {
         console.error(`Error during squash for period ${next.period}:`, e.message || e);
         try {
@@ -702,6 +730,13 @@ async function squashHistory(strategy, verbose) {
           /* ignore */
         }
         process.exit(1);
+      }
+
+      if (!didRebase) {
+        skippedRunKeys.add(squishableRunKey(next));
+        skippedSegmentCount += 1;
+        console.log(`⊘ Left ${next.commits.length} commit(s) for ${next.period} unchanged (skipped).`);
+        continue;
       }
 
       const commitsAfter = gitRevListCount(verbose);
@@ -723,6 +758,11 @@ async function squashHistory(strategy, verbose) {
 
     console.log('\n' + '='.repeat(50));
     console.log('Commit merging completed.');
+    if (skippedSegmentCount > 0) {
+      console.log(
+        `Note: ${skippedSegmentCount} segment(s) were skipped (often two roots for one calendar period after a merge-preserving squash).`
+      );
+    }
     console.log(`Before: ${totalBefore} commits`);
     console.log(`After: ${totalAfter} commits`);
     console.log(`Reduced by: ${totalBefore - totalAfter} commits`);
