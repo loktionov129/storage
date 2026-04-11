@@ -39,18 +39,37 @@ const config = {
 };
 
 /**
- * Escapes double quotes in a commit message to prevent shell interpretation issues
- * when used in command-line operations.
- *
- * @param {string} message - The original commit message that may contain double quotes
- * @returns {string} The escaped commit message with double quotes replaced by \"
- *
- * @example
- * escapeCommitMessage('Fix "broken" feature') // returns 'Fix \"broken\" feature'
+ * Escapes special characters in commit messages
+ * @param {string} message - Commit message to escape
+ * @returns {string} Escaped commit message
  */
 function escapeCommitMessage(message) {
-  return message.replace(/"/g, '\\"');
+  return message
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, '\$');
 }
+
+/**
+ * Cleans up old history by removing dangling objects and obsolete replacements
+ * @param {boolean} verbose - Verbose output flag
+ */
+function cleanupOldHistory(verbose) {
+  console.log('Cleaning up old history...');
+  try {
+    // Prune dangling objects immediately
+    execSync('git gc --prune=now', {
+      stdio: verbose ? 'inherit' : 'pipe'
+    });
+    // Remove obsolete replacements
+    execSync('git replace -d $(git replace --list)', {
+      stdio: 'ignore'
+    });
+    console.log('Old history cleaned up successfully');
+  } catch (error) {
+    console.warn('History cleanup warning:', error.message);
+  }
+}
+
 
 /**
  * Safely removes a temporary file if it exists.
@@ -258,37 +277,29 @@ function createSquashMessage(count, period, topic) {
 }
 
 /**
- * Performs interactive rebase to squash commits in a given period
+ * Performs squash of commits for a specific period using git replace
  * @param {string[]} commits - Array of commit lines for the period
- * @param {string} period - Period identifier
+ * @param {string} period - Period identifier (e.g., '2023')
  * @param {string} squashMessage - Message for the squashed commit
  * @param {boolean} verbose - Verbose output flag
  */
 function performSquash(commits, period, squashMessage, verbose) {
   if (commits.length <= 1) {
     if (verbose) console.log(`Skipping ${period}: only ${commits.length} commit(s)`);
-    return; // Nothing to squash
+    return;
   }
 
   console.log(`Processing period: ${period} (${commits.length} commits)`);
 
-  // Get the oldest commit hash (first in the sorted group)
   const oldestCommit = commits[0].split(' ')[0];
+  const newestCommit = commits[commits.length - 1].split(' ')[0];
 
   try {
-    // Create a temporary file with rebase commands
-    const rebaseCommands = commits
-      .map((commit, index) => {
-        const hash = commit.split(' ')[0];
-        return index === 0 ? `pick ${hash}` : `squash ${hash}`;
-      })
-      .join('\n');
+    // Create temporary branch for squash operations
+    execSync(`git checkout -b temp-squash-${period}`, { stdio: 'ignore' });
 
-    const tempFile = path.join(process.cwd(), '.git', 'rebase-commands');
-    fs.writeFileSync(tempFile, rebaseCommands);
-
-    // Cross‑platform way: use env option to set GIT_SEQUENCE_EDITOR
-    execSync('git rebase -i ' + oldestCommit + '^', {
+    // Perform interactive rebase with cherry‑pick reapplication
+    execSync('git rebase -i --reapply-cherry-picks --onto ' + oldestCommit + '^ ' + newestCommit, {
       stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'inherit'],
       env: {
         ...process.env,
@@ -296,30 +307,39 @@ function performSquash(commits, period, squashMessage, verbose) {
       }
     });
 
-    // Amend the commit message with the squash message
+    // Amend commit message with squash message
     const safeMessage = escapeCommitMessage(squashMessage);
     execSync(`git commit --amend -m "${safeMessage}"`, {
       stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'inherit']
     });
 
-    // Clean up: remove the temporary file
-    cleanup(tempFile);
+    // Switch back to original branch
+    execSync('git checkout -', { stdio: 'ignore' });
+
+    // Replace original commit range with squashed commit using git replace
+    execSync(`git replace ${oldestCommit}^ ${newestCommit} --with-parents temp-squash-${period}`, {
+      stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'inherit']
+    });
+
+    // Delete temporary branch
+    execSync(`git branch -D temp-squash-${period}`, { stdio: 'ignore' });
 
     console.log(`✓ Successfully squashed ${commits.length} commits for ${period}`);
   } catch (error) {
     console.error(`Error during squash for period ${period}:`, error.message);
-    // Attempt to clean up the temporary file if it exists
-    const tempFile = path.join(process.cwd(), '.git', 'rebase-commands');
-    cleanup(tempFile);
-    // Abort the rebase if it's in progress
+
+    // Attempt cleanup on error
     try {
       execSync('git rebase --abort', { stdio: 'ignore' });
-    } catch (abortError) {
-      // Ignore if abort fails (e.g., no rebase in progress)
-    }
+    } catch (abortError) { /* Ignore */ }
+    try {
+      execSync(`git branch -D temp-squash-${period}`, { stdio: 'ignore' });
+    } catch (branchError) { /* Ignore */ }
+
     process.exit(1);
   }
 }
+
 
 /**
  * Main function to orchestrate the squash process
@@ -377,9 +397,12 @@ async function squashHistory(strategy, verbose) {
     const topic = determineTopic(periodCommits);
     const squashMessage = createSquashMessage(periodCommits.length, period, topic);
 
-    console.log(`[${i + 1}/${processedPeriods.length}] `);
+    console.log(`[${i + 1}/${processedPeriods.length}]`);
     performSquash(periodCommits, period, squashMessage, verbose);
   }
+
+  // Clean up old history after all squashes
+  cleanupOldHistory(verbose);
 
   // Generate final report
   const totalAfter = processedPeriods.length;
@@ -391,6 +414,8 @@ async function squashHistory(strategy, verbose) {
   console.log('Processed periods:');
   processedPeriods.forEach(period => console.log(`- ${period}`));
   console.log('='.repeat(50));
+}
+
 }
 
 // Execute the script if run directly
