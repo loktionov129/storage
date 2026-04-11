@@ -333,8 +333,16 @@ function indexMatchesHead(verbose) {
   }
 }
 
+/** Collapse whitespace so line-broken Git messages (e.g. "would make\\nit empty") still match. */
+function normalizedGitErrorText(err) {
+  const raw = `${err && err.message ? err.message : ''}\n${err && err.stderr ? err.stderr : ''}\n${
+    err && err.stdout ? err.stdout : ''
+  }`;
+  return raw.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 function looksLikeEmptySquashFailure(err) {
-  const text = `${err && err.message ? err.message : ''}\n${err && err.stderr ? err.stderr : ''}`.toLowerCase();
+  const text = normalizedGitErrorText(err);
   return (
     text.includes('would make it empty') ||
     text.includes('would become empty') ||
@@ -343,8 +351,7 @@ function looksLikeEmptySquashFailure(err) {
 }
 
 function looksLikeCouldNotApply(err) {
-  const text = `${err && err.message ? err.message : ''}\n${err && err.stderr ? err.stderr : ''}`.toLowerCase();
-  return text.includes('could not apply');
+  return normalizedGitErrorText(err).includes('could not apply');
 }
 
 /**
@@ -366,11 +373,12 @@ function tryFinishRebaseAfterEmptySquash(verbose, rebaseErr, continueEnv) {
     );
   }
 
+  const amendEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
   try {
     runGit(['commit', '--amend', '--allow-empty', '--no-edit'], {
       verbose,
       stdio: 'inherit',
-      env: continueEnv
+      env: amendEnv
     });
   } catch {
     return false;
@@ -398,14 +406,15 @@ function tryFinishRebaseAfterEmptySquash(verbose, rebaseErr, continueEnv) {
 
     const faux = {
       message: `${r.stderr || ''}\n${r.stdout || ''}`,
-      stderr: r.stderr || ''
+      stderr: r.stderr || '',
+      stdout: r.stdout || ''
     };
     if (gitRebaseStatePath(verbose) && !hasUnmergedPaths(verbose) && looksLikeEmptySquashFailure(faux)) {
       try {
         runGit(['commit', '--amend', '--allow-empty', '--no-edit'], {
           verbose,
           stdio: 'inherit',
-          env: continueEnv
+          env: amendEnv
         });
       } catch {
         if (verbose && r.stderr) console.error(r.stderr);
@@ -858,13 +867,12 @@ fs.writeFileSync(dst, t);
     });
 
     if (rb.status !== 0) {
-      const msg =
-        (rb.stderr && rb.stderr.trim()) ||
-        (rb.stdout && rb.stdout.trim()) ||
-        `git ${rebaseCmd[0]} failed with exit ${rb.status}`;
+      const combined = [rb.stderr, rb.stdout].filter(Boolean).join('\n').trim();
+      const msg = combined || `git ${rebaseCmd[0]} failed with exit ${rb.status}`;
       const rebaseErr = new Error(msg);
       rebaseErr.stderr = rb.stderr || '';
-      if (verbose && rb.stderr) console.error(rb.stderr.trim());
+      rebaseErr.stdout = rb.stdout || '';
+      if (verbose && combined) console.error(combined);
 
       if (fs.existsSync(sentinelNoContiguous)) {
         removeQuiet(sentinelNoContiguous);
