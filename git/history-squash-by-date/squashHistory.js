@@ -51,6 +51,12 @@ function parseArgs(argv) {
   let verbose = false;
   /** If true, use Git defaults for directory-rename detection during rebase (may stop on CONFLICT file location). */
   let strictDirectoryRenames = false;
+  /**
+   * When set, keep the old sequence-editor behavior: if `--rebase-merges` splits matching `pick`
+   * lines, rewrite any matching `pick` to `squash` (non-contiguous). That can replay commits onto
+   * the wrong parent and cause rename/delete conflicts; default is to skip such segments safely.
+   */
+  let allowLegacyFallback = false;
 
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === '--strategy' && i + 1 < args.length) {
@@ -60,10 +66,12 @@ function parseArgs(argv) {
       verbose = true;
     } else if (args[i] === '--strict-directory-renames') {
       strictDirectoryRenames = true;
+    } else if (args[i] === '--allow-legacy-fallback') {
+      allowLegacyFallback = true;
     }
   }
 
-  return { strategy, verbose, strictDirectoryRenames };
+  return { strategy, verbose, strictDirectoryRenames, allowLegacyFallback };
 }
 
 function logGit(verbose, args) {
@@ -372,20 +380,34 @@ function getRootHashesSet(verbose) {
 /**
  * Sequence editor: prefers a *contiguous* block of `pick` lines matching this run (same order as
  * `git log --reverse`). With `--rebase-merges`, those lines are often split by `label` / `merge` /
- * `reset`, so no contiguous match exists. Then we fall back to legacy per-hash `pick`→`squash`
- * (any matching line in the todo), which matches older script behavior; the main loop’s no-op
- * guard catches cases where Git does not actually drop commits.
+ * `reset`, so no contiguous match exists. By default we then **abort** (exit 1) after writing a
+ * sentinel file: legacy per-hash `pick`→`squash` can replay onto the wrong parent and cause
+ * rename/delete conflicts. Pass `--allow-legacy-fallback` to restore the old non-contiguous
+ * rewrite (risky).
  * When a contiguous block exists but the pick base is not first in file order, we reorder that
  * block so the chosen base is `pick` and the rest are `squash` in original file order.
  */
-function writeSequenceTransformScript(tmpDir, orderedFullHashes, pickFullHash, rootHashesLc) {
+function writeSequenceTransformScript(
+  tmpDir,
+  orderedFullHashes,
+  pickFullHash,
+  rootHashesLc,
+  sentinelPath,
+  allowLegacyFallback
+) {
   const ordered = orderedFullHashes.map((h) => h.toLowerCase());
   const pickIx = ordered.indexOf(pickFullHash.toLowerCase());
   if (pickIx < 0) {
     throw new Error('Pick hash is not in this run commit list.');
   }
   const roots = (rootHashesLc || []).map((h) => String(h).toLowerCase());
-  const cfg = { ordered, pickIx, roots };
+  const cfg = {
+    ordered,
+    pickIx,
+    roots,
+    sentinel: sentinelPath || '',
+    allowLegacyFallback: allowLegacyFallback === true
+  };
   const body = `'use strict';
 const fs = require('fs');
 const { spawnSync } = require('child_process');
@@ -453,8 +475,23 @@ for (let j = 0; j <= picks.length - ordered.length; j += 1) {
 
 if (start < 0) {
   console.error(
-    '[squash-history sequence editor] No contiguous pick block (common with --rebase-merges). ' +
-      'Falling back to legacy per-hash pick→squash (may fold into the wrong parent for some merges).'
+    '[squash-history sequence editor] No contiguous pick block (common with --rebase-merges).'
+  );
+  if (!cfg.allowLegacyFallback) {
+    try {
+      if (cfg.sentinel) fs.writeFileSync(cfg.sentinel, 'no-contiguous-picks\\n', 'utf8');
+    } catch (e) {
+      /* ignore */
+    }
+    console.error(
+      'Skipping this squash step (safe default). Legacy per-hash pick→squash can replay onto the ' +
+        'wrong parent and cause rename/delete conflicts. Linearize related merges first, or re-run with ' +
+        '--allow-legacy-fallback to use the old behavior (risky).'
+    );
+    process.exit(1);
+  }
+  console.error(
+    'Falling back to legacy per-hash pick→squash (may fold into the wrong parent for some merges).'
   );
   const firstLc = ordered[pickIx];
   const squashSet = new Set(ordered.filter((_, i) => i !== pickIx));
@@ -594,10 +631,13 @@ function resolvePickAndSquashHashes(run, verbose) {
 }
 
 /**
- * @returns {boolean} true if an interactive rebase was finished; false if this run was skipped
+ * @returns {boolean|'topo-skip'} true if an interactive rebase was finished; false if this run was
+ * skipped (e.g. cannot squash roots); 'topo-skip' if rebase was aborted because picks were not
+ * contiguous under --rebase-merges (safe default unless --allow-legacy-fallback).
  */
 function squashOneRun(run, verbose, tmpDir, rebaseOptions = {}) {
   const strictDirectoryRenames = rebaseOptions.strictDirectoryRenames === true;
+  const allowLegacyFallback = rebaseOptions.allowLegacyFallback === true;
   const { commits } = run;
   if (commits.length <= 1) return false;
 
@@ -623,7 +663,16 @@ function squashOneRun(run, verbose, tmpDir, rebaseOptions = {}) {
   const { ontoArgs } = rebaseOntoArgs(firstHash, verbose);
 
   const msgPath = writeTempFile(tmpDir, 'squash-msg', `${message}\n`);
-  const seqScript = writeSequenceTransformScript(tmpDir, orderedFullHashes, firstHash, rootList);
+  const sentinelNoContiguous = path.join(tmpDir, 'squash-history-no-contiguous-picks');
+  removeQuiet(sentinelNoContiguous);
+  const seqScript = writeSequenceTransformScript(
+    tmpDir,
+    orderedFullHashes,
+    firstHash,
+    rootList,
+    sentinelNoContiguous,
+    allowLegacyFallback
+  );
   const msgScript = writeCopyEditorScript(tmpDir, msgPath);
   const sequenceEditorCmd = editorCommand(seqScript);
   const messageEditorCmd = editorCommand(msgScript);
@@ -653,7 +702,19 @@ function squashOneRun(run, verbose, tmpDir, rebaseOptions = {}) {
         GIT_EDITOR: messageEditorCmd
       }
     });
+  } catch (e) {
+    if (fs.existsSync(sentinelNoContiguous)) {
+      removeQuiet(sentinelNoContiguous);
+      try {
+        runGit(['rebase', '--abort'], { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] });
+      } catch {
+        /* ignore */
+      }
+      return 'topo-skip';
+    }
+    throw e;
   } finally {
+    removeQuiet(sentinelNoContiguous);
     removeQuiet(msgPath);
     removeQuiet(seqScript);
     removeQuiet(msgScript);
@@ -690,6 +751,7 @@ function uniquePeriodLabels(runs) {
 
 async function squashHistory(strategy, verbose, options = {}) {
   const strictDirectoryRenames = options.strictDirectoryRenames === true;
+  const allowLegacyFallback = options.allowLegacyFallback === true;
   if (!STRATEGIES.includes(strategy)) {
     console.error(
       `Error: Unknown strategy '${strategy}'. Valid values: ${STRATEGIES.join(', ')}.`
@@ -763,7 +825,10 @@ async function squashHistory(strategy, verbose, options = {}) {
       const commitsBefore = gitRevListCount(verbose);
       let didRebase = false;
       try {
-        didRebase = squashOneRun(next, verbose, tmpDir, { strictDirectoryRenames });
+        didRebase = squashOneRun(next, verbose, tmpDir, {
+          strictDirectoryRenames,
+          allowLegacyFallback
+        });
       } catch (e) {
         console.error(`Error during squash for period ${next.period}:`, e.message || e);
         console.error('Hint: To undo this failed rebase: git rebase --abort');
@@ -775,10 +840,16 @@ async function squashHistory(strategy, verbose, options = {}) {
         process.exit(1);
       }
 
-      if (!didRebase) {
+      if (!didRebase || didRebase === 'topo-skip') {
         skippedRunKeys.add(squishableRunKey(next));
         skippedSegmentCount += 1;
-        console.log(`⊘ Left ${next.commits.length} commit(s) for ${next.period} unchanged (skipped).`);
+        if (didRebase === 'topo-skip') {
+          console.warn(
+            `⊘ Skipped ${next.period} (${next.commits.length} commit(s)): no contiguous pick block under --rebase-merges.`
+          );
+        } else {
+          console.log(`⊘ Left ${next.commits.length} commit(s) for ${next.period} unchanged (skipped).`);
+        }
         continue;
       }
 
@@ -822,17 +893,17 @@ async function squashHistory(strategy, verbose, options = {}) {
 }
 
 function main() {
-  const { strategy, verbose, strictDirectoryRenames } = parseArgs(process.argv);
+  const { strategy, verbose, strictDirectoryRenames, allowLegacyFallback } = parseArgs(process.argv);
 
   if (!strategy) {
     console.error(
-      'Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day> [--verbose] [--strict-directory-renames]'
+      'Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day> [--verbose] [--strict-directory-renames] [--allow-legacy-fallback]'
     );
     console.error(`Available strategies: ${STRATEGIES.join(', ')}`);
     process.exit(1);
   }
 
-  squashHistory(strategy, verbose, { strictDirectoryRenames }).catch((err) => {
+  squashHistory(strategy, verbose, { strictDirectoryRenames, allowLegacyFallback }).catch((err) => {
     console.error('Unexpected error:', err);
     process.exit(1);
   });
