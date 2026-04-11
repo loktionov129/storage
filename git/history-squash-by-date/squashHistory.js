@@ -345,21 +345,27 @@ function getRootHashesSet(verbose) {
   );
 }
 
-function writeSequenceTransformScript(tmpDir, squashFullHashes, firstFullHash, rootHashesLc) {
-  const roots = [...rootHashesLc].map((h) => h.toLowerCase());
-  const cfg = {
-    squash: squashFullHashes.map((h) => h.toLowerCase()),
-    first: firstFullHash.toLowerCase(),
-    roots
-  };
+/**
+ * Sequence editor: finds a *contiguous* block of `pick` lines matching this run (git-replay order).
+ * With `--rebase-merges`, turning non-adjacent picks into `squash` makes Git fold into the wrong
+ * parent; the rebase then “succeeds” without reducing commits → infinite outer loop.
+ * If the chosen pick base is not the first line of that block (e.g. multiple roots), we reorder
+ * the block so `pickHash` is first, then `squash` the rest in a safe wrap order.
+ */
+function writeSequenceTransformScript(tmpDir, orderedFullHashes, pickFullHash) {
+  const ordered = orderedFullHashes.map((h) => h.toLowerCase());
+  const pickIx = ordered.indexOf(pickFullHash.toLowerCase());
+  if (pickIx < 0) {
+    throw new Error('Pick hash is not in this run commit list.');
+  }
+  const cfg = { ordered, pickIx };
   const body = `'use strict';
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const cfg = ${JSON.stringify(cfg)};
 const dest = process.argv[process.argv.length - 1];
-const squashSet = new Set(cfg.squash);
-const firstLc = cfg.first;
-const rootSet = new Set(cfg.roots);
+const ordered = cfg.ordered;
+const pickIx = cfg.pickIx;
 
 function resolveCommit(token) {
   const r = spawnSync('git', ['rev-parse', '--verify', token + '^{commit}'], {
@@ -372,14 +378,79 @@ function resolveCommit(token) {
 
 const text = fs.readFileSync(dest, 'utf8');
 const lines = text.split(/\\r?\\n/);
-const out = lines.map((line) => {
-  const m = /^(pick)\\s+([0-9a-f]+)\\b(.*)$/i.exec(line);
-  if (!m) return line;
+
+const pickRe = /^(pick)\\s+([0-9a-f]+)\\b(.*)$/i;
+const picks = [];
+for (let i = 0; i < lines.length; i += 1) {
+  const m = pickRe.exec(lines[i]);
+  if (!m) continue;
   const full = resolveCommit(m[2]);
-  if (!full || full === firstLc || rootSet.has(full) || !squashSet.has(full)) return line;
-  return 'squash ' + m[2] + m[3];
-});
-fs.writeFileSync(dest, out.join('\\n'));
+  if (full) picks.push({ i, abbrev: m[2], rest: m[3], full });
+}
+
+function fail(msg) {
+  console.error('[squash-history sequence editor] ' + msg);
+  process.exit(1);
+}
+
+if (ordered.length <= 1) {
+  fs.writeFileSync(dest, text);
+  process.exit(0);
+}
+
+let start = -1;
+for (let j = 0; j <= picks.length - ordered.length; j += 1) {
+  let ok = true;
+  for (let k = 0; k < ordered.length; k += 1) {
+    if (picks[j + k].full !== ordered[k]) {
+      ok = false;
+      break;
+    }
+    if (k > 0) {
+      const prev = picks[j + k - 1].i;
+      const cur = picks[j + k].i;
+      let betweenOk = true;
+      for (let b = prev + 1; b < cur; b += 1) {
+        const s = (lines[b] || '').trim();
+        if (s === '' || s.startsWith('#')) continue;
+        betweenOk = false;
+        break;
+      }
+      if (!betweenOk) {
+        ok = false;
+        break;
+      }
+    }
+  }
+  if (ok) {
+    start = j;
+    break;
+  }
+}
+
+if (start < 0) {
+  fail(
+    'Could not find a contiguous pick block for this squash run (needed for rebase-merges). ' +
+      'Commits may be split across merge lanes; resolve manually or simplify merge structure.'
+  );
+}
+
+const n = ordered.length;
+const p = pickIx;
+const squashIdx = [];
+for (let k = 0; k < n; k += 1) {
+  if (k !== p) squashIdx.push(k);
+}
+
+const blockStart = picks[start].i;
+const blockEnd = picks[start + n - 1].i;
+const newBlock = ['pick ' + picks[start + p].abbrev + picks[start + p].rest];
+for (const k of squashIdx) {
+  const e = picks[start + k];
+  newBlock.push('squash ' + e.abbrev + e.rest);
+}
+const merged = lines.slice(0, blockStart).concat(newBlock, lines.slice(blockEnd + 1));
+fs.writeFileSync(dest, merged.join('\\n'));
 `;
   return writeTempFile(tmpDir, 'seq-transform', body, '.js');
 }
@@ -494,14 +565,15 @@ function squashOneRun(run, verbose, tmpDir) {
   const { firstHash, squashTargets } = resolvePickAndSquashHashes(run, verbose);
   if (!firstHash || squashTargets.length === 0) return;
 
+  const orderedFullHashes = commits.map((c) => c.hash);
+
   const topic = determineTopic(commits);
   const message = createSquashMessage(commits.length, run.period, topic);
 
   const { ontoArgs } = rebaseOntoArgs(firstHash, verbose);
 
-  const rootHashes = getRootHashesSet(verbose);
   const msgPath = writeTempFile(tmpDir, 'squash-msg', `${message}\n`);
-  const seqScript = writeSequenceTransformScript(tmpDir, squashTargets, firstHash, [...rootHashes]);
+  const seqScript = writeSequenceTransformScript(tmpDir, orderedFullHashes, firstHash);
   const msgScript = writeCopyEditorScript(tmpDir, msgPath);
   const sequenceEditorCmd = editorCommand(seqScript);
   const messageEditorCmd = editorCommand(msgScript);
@@ -612,6 +684,7 @@ async function squashHistory(strategy, verbose) {
       step += 1;
       console.log(`[${step}/${totalSquashSteps}] Processing ${next.period} (${next.commits.length} commits)`);
 
+      const commitsBefore = gitRevListCount(verbose);
       try {
         squashOneRun(next, verbose, tmpDir);
       } catch (e) {
@@ -621,6 +694,15 @@ async function squashHistory(strategy, verbose) {
         } catch {
           /* ignore */
         }
+        process.exit(1);
+      }
+
+      const commitsAfter = gitRevListCount(verbose);
+      if (commitsAfter >= commitsBefore) {
+        console.error(
+          `Squash step did not reduce history (${commitsBefore} → ${commitsAfter} commits). ` +
+            'Stopping to avoid an infinite loop. If you were mid-rebase, run: git rebase --abort'
+        );
         process.exit(1);
       }
 
