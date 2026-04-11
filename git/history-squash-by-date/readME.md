@@ -145,4 +145,14 @@ node squashHistory.js --strategy day
 
 ---
 
-Если хотите, могу уточнить какой‑либо раздел или добавить дополнительные примеры!
+## Реальные примеры
+
+### Этот репозиторий со стратегией year
+https://github.com/loktionov129/storage/commits/feature/squashHistory-year/
+
+### Mpgp до выполнения скрипта
+https://github.com/mpgp/Mpgp/tree/feature/history-11april2026-before
+
+### Mpgp после выполнения скрипта
+https://github.com/mpgp/Mpgp/tree/feature/history-11april2026-after
+
