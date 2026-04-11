@@ -1,130 +1,111 @@
-# Specification for `squashHistory.js` Script
+# Specification: `squashHistory.js`
 
 ## Purpose
 
-The script automates the squashing (merging) of Git commits by periods (year/month/day) with topic analysis based on Conventional Commits. It is designed to simplify Git repository history.
+Automate rewriting Git history by calendar period (year / month / day), with optional topic hints derived from Conventional Commits–style prefixes in commit subjects. The goal is a shorter, readable history while keeping meaningful squash messages.
 
-## Functional Requirements
+## Strategies (behavior differs by strategy)
 
-### Main Functions
+### `year` — snapshot rewrite (default path for year)
 
-* Grouping commits by periods: year, month, or day.
-* Analyzing commit topics based on Conventional Commits keywords.
-* Creating meaningful squash commit messages.
-* Performing interactive rebase for squashing.
-* Generating a report on the operation.
+* Builds **one new commit per distinct author-year** found in the same `git log --reverse` walk used elsewhere in the script (author date from `git log` `%ai`, local timezone).
+* For each year **Y**, the new commit’s **tree** is taken from the **last** commit in that walk whose author-year is **Y** (the “snapshot” at the end of that year in walk order).
+* History becomes **linear**: existing **merge commits are not preserved**; their reachable trees are folded into the walk as Git orders it.
+* Implemented with **`git commit-tree`** chained by parent, then **`git update-ref`** on the current branch and **`git reset --hard`** to the new tip.
+* Requires **HEAD** to be a **named branch** (not detached).
 
-### Input Parameters
+### `month` and `day` — interactive rebase
+
+* Groups non-merge commits into runs by calendar month (`YYYY-MM`) or day (`YYYY-MM-DD`). **Merge commits** are never grouped with neighbors; each merge stays a single-commit “run”.
+* Squash runs via **`git rebase -i --rebase-merges`** so merge structure is preserved where Git allows.
+* Default merge options: **`-c merge.directoryRenames=false`** and **`-s recursive`** during rebase (directory rename detection can otherwise produce hard “file location” conflicts with squash + merges).
+* If **`--strict-directory-renames`** is set, the script omits that `-c` override (Git defaults apply; conflicts may be more likely).
+* If the interactive todo has **no contiguous block** of `pick` lines for a run (common with `--rebase-merges`), the script **skips** that segment by default. **`--allow-legacy-fallback`** restores the older non-contiguous `pick` → `squash` rewrite (unsafe: can replay onto the wrong parent and cause rename/delete conflicts).
+* When a squash step would create an **empty** commit, the script may recover using **`git commit --amend --allow-empty --no-edit`** and **`git rebase --continue`** (message detection normalizes whitespace so line-broken Git errors still match).
+
+## Functional requirements
+
+* Group commits by the selected strategy (rules above).
+* Infer a dominant **topic** from Conventional Commits types in subjects (`feat:`, `fix:`, …) when present.
+* Emit squash messages: `squash: <count> commits for <period>` or with `(<topic>)` when a topic wins.
+* Ask for **confirmation** before rewriting history.
+* Print a **summary** (before/after commit count, periods processed).
+
+## Input parameters
 
 | Parameter | Type | Required | Description |
-|---------|---------|-------------|-------------|
-| `--strategy` | `string` | Yes | Grouping strategy: `year`, `month`, or `day` |
-| `--verbose` | flag | No | Detailed output of all Git operations |
+|-----------|------|----------|-------------|
+| `--strategy` | string | Yes | `year`, `month`, or `day` |
+| `--verbose` | flag | No | Log `git` invocations to stderr; more process output where applicable |
+| `--strict-directory-renames` | flag | No | **Month/day only:** do not force `merge.directoryRenames=false` during rebase |
+| `--allow-legacy-fallback` | flag | No | **Month/day only:** allow legacy non-contiguous sequence rewrite when picks are split by `--rebase-merges` |
 
-### Output Data
+## Output
 
-* Modified Git repository history (squashed commits).
-* Console report on the completed operation.
+* **Rewritten** history on the current branch (`year`: exact count = number of distinct author-years in the walk; `month`/`day`: depends on segments successfully squashed vs skipped).
+* Console summary and progress lines.
 
-## Technical Requirements
+## Technical requirements
 
-### Dependencies
+* **Node.js** 12+.
+* **Git** 2.x with working `rebase -i`, `rebase-merges`, and `commit-tree` (typical modern Git).
 
-* Node.js (version 12+).
-* Git (version 2.0+).
+## Execution environment
 
-### Execution Environment
+* Run from the **root** of a Git work tree (or any directory inside it).
+* Working tree and index must be **clean** (no uncommitted changes).
 
-* Must be run in the root of a Git repository.
-* Repository must be clean (no uncommitted changes).
+## Error handling
 
-### Error Handling
+* Not in a Git repository → error, exit non-zero.
+* Uncommitted changes → error, exit non-zero.
+* Unknown `--strategy` → error, list valid values.
+* No commits / nothing to do → informational message, exit zero where appropriate.
+* **`year`** on **detached HEAD** → error (cannot update a branch ref safely).
+* **Month/day** rebase failure → attempt `git rebase --abort` in the error path; message suggests abort if stuck.
 
-The script must handle the following scenarios:
+## Data formats
 
-* Running outside a Git repository → error and exit.
-* Uncommitted changes present → error and exit.
-* Invalid grouping strategy → error and exit.
-* No commits to process → informational message.
-* Errors during rebase → abort operation, clean up temporary files, informative message.
+### Commit walk (grouping input)
 
-## Data Format
+* Source: `git log --reverse` with NUL-separated records, fields `%H`, `%ai`, `%s`.
+* Author calendar bucket uses the **local** author date prefix `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` depending on strategy.
 
-### Input (Git log)
+### Squash message (output)
 
-Git log output format:
 ```
-<hash> <date> <message>
-```
-
-Example:
-```
-a1b2c3d4 2023-10-01 14:30:00 +0300 feat: add new feature
-```
-
-### Output (Squash Message)
-
-Squash commit message format:
-```
-squash: <count> commits for <period> (<topic>)
-```
-or without topic:
-```
-squash: <count> commits for <period>
+squash: <n> commits for <period>
+squash: <n> commits for <period> (<topic>)
 ```
 
-Examples:
-* `squash: 5 commits for 2023 (new features)`;
-* `squash: 3 commits for 2023-10`.
+Examples: `squash: 73 commits for 2026 (new features)`; `squash: 5 commits for 2023-10`.
 
-## Configuration
+## Topic keywords
 
-### Supported Strategies
+The script maps Conventional Commits types in commit subjects to short English topic phrases (e.g. `feat` → “new features”, `fix` → “bug fixes”). Extended types include `wip`, `security`, `i18n`, and others defined in code.
 
-* `year` — grouping by years (e.g., `2023`);
-* `month` — grouping by months (e.g., `2023-10`);
-* `day` — grouping by days (e.g., `2023-10-01`).
+## Execution flow (high level)
 
-### Topic Keywords
+1. Parse CLI arguments.
+2. Verify repository and clean working tree.
+3. Load commits via `git log` (oldest-first list).
+4. **`year`:** compute last source hash per author-year → confirm → build `commit-tree` chain → update branch + hard reset → report.
+5. **`month` / `day`:** build runs (merges isolated) → confirm → loop interactive squashes until no squishable run remains or user flow ends → report skipped segments if any.
 
-The script uses the `config.topicKeywords` dictionary to map keywords in commit messages to human‑readable topics. Supported:
+## Security and safety
 
-* Standard Conventional Commits types (`feat`, `fix`, `docs`, etc.).
-* Extended community types (`wip`, `security`, `i18n`, etc.).
+* Interactive confirmation before destructive steps.
+* **`GIT_TERMINAL_PROMPT=0`** so Git does not hang on credential prompts in automation.
+* Temporary helper scripts under the system temp directory; removed after each squash step (`month`/`day`) or not used for `year` snapshot path beyond any shared helpers.
 
-## Execution Flow
+## UX
 
-1. Parse command‑line arguments.
-2. Check environment (Git repository, clean state).
-3. Retrieve commit history via `git log`.
-4. Group commits by selected strategy.
-5. Sort commits within groups by date (oldest to newest).
-6. Prompt user for confirmation before starting squash.
-7. For each period:
-    * Determine dominant topic (if any).
-    * Create squash message.
-    * Perform squash via interactive rebase.
-    * Log progress.
-8. Generate final report.
-
-## Security
-
-* Confirmation before potentially dangerous operations (rebase).
-* Escaping commit messages before using in Git commands.
-* Cleaning up temporary files after completion or error.
-* Using `GIT_SEQUENCE_EDITOR="true"` for cross‑platform compatibility.
-
-## UX Features
-
-* Progress indicator: `[1/5] Processing 2023...`.
-* Detailed output when using the `--verbose` flag.
-* Informative error messages.
-* Final report with commit savings.
+* Progress lines such as `[k/n] Processing <period> (...)`.
+* **`--verbose`:** stderr lines prefixed with `[git]` for subprocess arguments where implemented.
 
 ## Limitations
 
-* Works only in local repositories.
-* Requires a clean repository state.
-* Does not support squashing merge commits.
-* Does not handle commits without dates.
-
+* Local use only; does not fetch or push.
+* **`year`:** merge topology is lost; snapshot choice follows **author-year** in the script’s log walk, not “business calendar” or first-parent-only rules unless you change the script.
+* **`month` / `day`:** merge commits are not squashed; some segments may be skipped without `--allow-legacy-fallback`.
+* Commits whose author date cannot be parsed into `YYYY-MM-DD` are skipped in the walk.

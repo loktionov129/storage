@@ -1,159 +1,155 @@
-# Use Cases for `squashHistory.js`
+# Use cases: `squashHistory.js`
 
-## 1. Basic Usage — Squashing by Year
+## 1. One commit per calendar year (typical “10 years → 10 commits”)
 
-**Goal:** Simplify repository history by squashing all commits from each year into single commits.
+**Goal:** Collapse a long history so each author-year becomes exactly **one** commit with the **tree** that the last commit of that year had in the script’s log order.
 
 **Command:**
+
 ```bash
 node squashHistory.js --strategy year
 ```
 
 **Process:**
-1. Script checks if running in a Git repository and if it’s clean.
-2. Retrieves all commit history.
-3. Groups commits by year.
-4. Prompts for confirmation.
-5. For each year:
-    * Determines dominant topic.
-    * Creates squash message.
-    * Performs squash.
-6. Generates final report.
 
-**Output example:**
-```
-Found 150 commits to process
-Grouped into 3 periods
-Periods to process:
-- 2021
-- 2022
-- 2023
+1. Verifies Git repo and clean working tree.
+2. Reads commits oldest-first (`git log --reverse`, author dates).
+3. For each distinct author-year, picks the **last** commit in that walk for that year as the **tree** source.
+4. Prints a **plan** (year → short hash, fold count) and asks for confirmation.
+5. Builds a **linear** chain with `git commit-tree` (one commit per year), moves the **current branch** to the new tip, `git reset --hard`.
+6. Prints a short report (`Before` / `After` commit counts).
 
-Proceed with squash? (y/n): y
+**Notes:**
 
-Starting squash process...
-[1/3] Processing 2021 (45 commits)
-✓ Successfully squashed 45 commits for 2021
-[2/3] Processing 2022 (60 commits)
-✓ Successfully squashed 60 commits for 2022
-[3/3] Processing 2023 (45 commits)
-✓ Successfully squashed 45 commits for 2023
+* Merge commits disappear from history (flattened).
+* Requires a **named branch** (not detached `HEAD`).
+* **`--allow-legacy-fallback`** and **`--strict-directory-renames`** only apply to month/day; if passed with `year`, the script may print a short notice and ignores them for the rewrite.
+
+**Example output (shape):**
+
+```text
+Note: 7 merge commit(s) in the current history will be removed — year strategy produces one linear commit per author-year (tree snapshot).
+
+Found 500 commits in log walk; 10 distinct author-year(s).
+Planned commits (one tree snapshot per year, oldest → newest):
+  2017  ← abc1234  (51 source commit(s) in that year)
+  ...
+  2026  ← def7890  (73 source commit(s) in that year)
+
+Replace the current branch with 10 commit(s) (one per year above)? (y/n): y
 
 ==================================================
-Commit merging completed.
-Before: 150 commits
-After: 3 commits
-Reduced by: 147 commits
-Processed periods:
-- 2021
-- 2022
-- 2023
+Year snapshot rewrite completed (one commit per author-year).
+Before: 500 commits
+After: 10 commits
+Branch: refs/heads/main
+Years:
+- 2017
+...
+- 2026
 ==================================================
 ```
 
-## 2. Monthly Squashing with Verbose Output
+## 2. Squash by month (interactive rebase, merges preserved)
 
-**Goal:** Squash commits by month with detailed output for debugging.
+**Goal:** One squash commit per calendar month for **non-merge** runs, while keeping merge commits in the rebase topology.
 
 **Command:**
+
+```bash
+node squashHistory.js --strategy month
+```
+
+**Optional:**
+
 ```bash
 node squashHistory.js --strategy month --verbose
 ```
 
-**Use case:** When you need to see all Git commands being executed and detailed progress.
+Use **`--verbose`** to print each `git` invocation (stderr) and more live output.
 
-## 3. Daily Squashing for Detailed History
+**When segments are skipped:** If `--rebase-merges` splits the todo so there is no contiguous `pick` block for a month, that segment is skipped unless you pass **`--allow-legacy-fallback`** (risky).
 
-**Goal:** Maintain more granular history by squashing commits on a daily basis.
+## 3. Squash by day
+
+**Goal:** Finer buckets: one squash per calendar day (same mechanics as month, different grouping key).
 
 **Command:**
+
 ```bash
 node squashHistory.js --strategy day
 ```
 
-**Best for:** Projects with frequent small commits that want to keep some granularity in history.
+**Best for:** Very chatty histories where you still want day-level granularity.
 
-## 4. Dry‑Run Simulation (Manual)
+## 4. Directory renames during month/day rebase
 
-**Goal:** Preview what would happen without actually modifying history.
+**Goal:** Avoid some `CONFLICT (file location)` cases when merges and directory renames interact.
+
+**Default:** The script passes **`-c merge.directoryRenames=false`** with **`-s recursive`** for month/day rebases.
+
+**Override:** If you need Git’s default directory-rename detection:
+
+```bash
+node squashHistory.js --strategy month --strict-directory-renames
+```
+
+## 5. Preview before you say yes
+
+**Goal:** See how many periods and commits will be touched without reading the whole log first.
 
 **Method:**
-1. Run without `--verbose` to see summary.
-2. Review periods to be processed.
-3. Decide whether to proceed.
 
-**Alternative:** Add a `--dry-run` flag in future versions.
+1. Run the script and read the printed summary (periods, counts).
+2. Answer **`n`** at the confirmation prompt to cancel with no changes.
 
-## 5. Error Handling Scenarios
+There is no built-in `--dry-run` flag; canceling at the prompt is the safe preview.
 
-### Scenario 1: Not in Git repository
+## 6. Error scenarios
 
-**Command:**
+**Not a repository**
+
 ```bash
-cd /some/folder
-node squashHistory.js --strategy year
+cd /tmp && node /path/to/squashHistory.js --strategy year
+# → Error: Not in a Git repository.
 ```
 
-**Expected output:**
-```
-Error: Not in a Git repository.
-```
+**Dirty tree**
 
-### Scenario 2: Uncommitted changes
-
-**Command:**
 ```bash
-# After making changes without committing
+# with uncommitted changes
 node squashHistory.js --strategy year
+# → Error: The repository has uncommitted changes. Exiting.
 ```
 
-**Expected output:**
-```
-Error: The repository has uncommitted changes. Exiting.
-```
+**Invalid strategy**
 
-### Scenario 3: Invalid strategy
-
-**Command:**
 ```bash
 node squashHistory.js --strategy week
+# → Error: Unknown strategy 'week'. Valid values: year, month, day.
 ```
 
-**Expected output:**
-```
-Error: Unknown strategy 'week'. Valid values: year, month, day.
-```
+**Year strategy on detached HEAD**
 
-## 6. Integration into Development Workflow
-
-**Typical workflow:**
-1. Complete feature development.
-2. Test all changes.
-3. Run squash script before merging to main branch.
-4. Push cleaned history.
-
-**Benefits:**
-* Clean, readable Git history.
-* Easier code review.
-* Reduced repository size.
-* Clear chronological organization.
-
-## 7. Maintenance Use Case
-
-**Goal:** Periodic cleanup of old development branches.
-
-**Process:**
-1. Checkout old feature branch.
-2. Run squash with desired strategy.
-3. Merge cleaned branch to main.
-4. Delete old branch.
-
-**Example:**
 ```bash
-git checkout old‑feature‑branch
-node squashHistory.js --strategy month
-git checkout main
-git merge old‑feature‑branch
-git branch -d old‑feature‑branch
+git checkout --detach HEAD
+node squashHistory.js --strategy year
+# → Error: Detached HEAD — checkout a named branch before rewriting year history.
 ```
 
+## 7. Workflow: clean history before publishing
+
+1. Finish work on a branch; run tests.
+2. **`git checkout your-branch`** (named branch required for `year`).
+3. Run **`node squashHistory.js --strategy year`** (or `month` / `day`).
+4. Inspect **`git log`**, then force-push only if you intend to rewrite remote history (**coordinate with collaborators**).
+
+## 8. Recovering from a bad month/day rebase
+
+If an interactive step fails mid-way:
+
+```bash
+git rebase --abort
+```
+
+Then fix conflicts or choose different flags (`--strict-directory-renames`, or avoid `--allow-legacy-fallback` unless you accept risk) before retrying.
