@@ -416,8 +416,6 @@ async function squashHistory(strategy, verbose) {
   console.log('='.repeat(50));
 }
 
-}
-
 // Execute the script if run directly
 if (require.main === module) {
   const { strategy, verbose } = parseArgs();
