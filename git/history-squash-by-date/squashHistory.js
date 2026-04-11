@@ -328,28 +328,39 @@ function rebaseOntoArgs(firstHash, verbose) {
 
 /**
  * Writes a GIT_SEQUENCE_EDITOR script that edits Git’s generated todo (with merges)
- * by turning selected `pick` lines into `squash`. Abbreviated hashes in the todo are
- * matched against full hashes from the run.
+ * by turning selected `pick` lines into `squash`.
+ * Each `pick` hash is resolved with `git rev-parse` so shared abbrev prefixes (e.g. root vs
+ * child) never turn the wrong line into `squash` — which would hit “cannot fixup root commit”.
  */
-function writeSequenceTransformScript(tmpDir, squashFullHashes) {
-  const cfg = { squash: squashFullHashes.map((h) => h.toLowerCase()) };
+function writeSequenceTransformScript(tmpDir, squashFullHashes, firstFullHash) {
+  const cfg = {
+    squash: squashFullHashes.map((h) => h.toLowerCase()),
+    first: firstFullHash.toLowerCase()
+  };
   const body = `'use strict';
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 const cfg = ${JSON.stringify(cfg)};
 const dest = process.argv[process.argv.length - 1];
+const squashSet = new Set(cfg.squash);
+const firstLc = cfg.first;
+
+function resolveCommit(token) {
+  const r = spawnSync('git', ['rev-parse', '--verify', token + '^{commit}'], {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  if (r.status !== 0) return null;
+  return (r.stdout || '').trim().toLowerCase();
+}
+
 const text = fs.readFileSync(dest, 'utf8');
-function abbrevMatches(abbrev, full) {
-  const a = abbrev.toLowerCase();
-  const f = full.toLowerCase();
-  return f === a || f.startsWith(a) || (a.length >= 4 && f.startsWith(a));
-}
-function isSquashPick(abbrev) {
-  return cfg.squash.some((full) => abbrevMatches(abbrev, full));
-}
 const lines = text.split(/\\r?\\n/);
 const out = lines.map((line) => {
   const m = /^(pick)\\s+([0-9a-f]+)\\b(.*)$/i.exec(line);
-  if (!m || !isSquashPick(m[2])) return line;
+  if (!m) return line;
+  const full = resolveCommit(m[2]);
+  if (!full || full === firstLc || !squashSet.has(full)) return line;
   return 'squash ' + m[2] + m[3];
 });
 fs.writeFileSync(dest, out.join('\\n'));
@@ -369,7 +380,7 @@ function squashOneRun(run, verbose, tmpDir) {
   const squashTargets = commits.slice(1).map((c) => c.hash);
 
   const msgPath = writeTempFile(tmpDir, 'squash-msg', `${message}\n`);
-  const seqScript = writeSequenceTransformScript(tmpDir, squashTargets);
+  const seqScript = writeSequenceTransformScript(tmpDir, squashTargets, firstHash);
   const msgScript = writeCopyEditorScript(tmpDir, msgPath);
   const sequenceEditorCmd = editorCommand(seqScript);
   const messageEditorCmd = editorCommand(msgScript);
