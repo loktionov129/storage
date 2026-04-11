@@ -1,0 +1,1236 @@
+#!/usr/bin/env node
+
+/**
+ * Squashes Git history by calendar period (year / month / day) with optional
+ * Conventional-Commits–style topic labels. See spec.md and use_cases.md.
+ *
+ * `--strategy year` rewrites the branch to one linear commit per author-year (tree snapshots);
+ * month/day still use interactive rebase with merge preservation where applicable.
+ */
+
+const { spawnSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const readline = require('readline');
+
+const STRATEGIES = ['year', 'month', 'day'];
+
+const TOPIC_KEYWORDS = {
+  feat: 'new features',
+  fix: 'bug fixes',
+  docs: 'documentation updates',
+  style: 'code style changes (formatting, missing semi-colons, etc.)',
+  refactor: 'code refactoring',
+  perf: 'performance improvements',
+  test: 'adding or updating tests',
+  build: 'build system or dependencies changes',
+  ci: 'continuous integration configuration changes',
+  chore: 'maintenance tasks',
+  revert: 'reverted changes',
+  wip: 'work in progress',
+  security: 'security fixes',
+  i18n: 'internationalization and localization',
+  accessibility: 'accessibility improvements',
+  deps: 'dependency updates',
+  config: 'configuration changes',
+  deploy: 'deployment configuration changes',
+  ui: 'user interface changes',
+  ux: 'user experience improvements',
+  api: 'API changes',
+  db: 'database schema changes',
+  logging: 'logging improvements',
+  monitoring: 'monitoring and observability changes'
+};
+
+const CC_TYPE_PATTERN = new RegExp(
+  `^(${Object.keys(TOPIC_KEYWORDS).join('|')})(?:\\([^)]*\\))?!?:`,
+  'i'
+);
+
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  let strategy = null;
+  let verbose = false;
+  /** If true, use Git defaults for directory-rename detection during rebase (may stop on CONFLICT file location). */
+  let strictDirectoryRenames = false;
+  /**
+   * When set, keep the old sequence-editor behavior: if `--rebase-merges` splits matching `pick`
+   * lines, rewrite any matching `pick` to `squash` (non-contiguous). That can replay commits onto
+   * the wrong parent and cause rename/delete conflicts; default is to skip such segments safely.
+   */
+  let allowLegacyFallback = false;
+
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === '--strategy' && i + 1 < args.length) {
+      strategy = args[i + 1];
+      i += 1;
+    } else if (args[i] === '--verbose') {
+      verbose = true;
+    } else if (args[i] === '--strict-directory-renames') {
+      strictDirectoryRenames = true;
+    } else if (args[i] === '--allow-legacy-fallback') {
+      allowLegacyFallback = true;
+    }
+  }
+
+  return { strategy, verbose, strictDirectoryRenames, allowLegacyFallback };
+}
+
+function logGit(verbose, args) {
+  if (verbose) {
+    console.error(`[git] ${['git', ...args].join(' ')}`);
+  }
+}
+
+/**
+ * Git must not share the user's TTY on stdin: on Windows, failed unlinks during checkout/rebase
+ * trigger "Unlink of file ... failed. Should I try again? (y/n)" and would block the script.
+ */
+function gitChildStdio(stdio, verbose, input) {
+  if (stdio && stdio !== 'inherit') {
+    return stdio;
+  }
+  const usePipeIn = input != null && input !== '';
+  const inFd = usePipeIn ? 'pipe' : 'ignore';
+  if (stdio === 'inherit' || (stdio === undefined && verbose)) {
+    return [inFd, 'inherit', 'inherit'];
+  }
+  return [inFd, 'pipe', 'pipe'];
+}
+
+function runGit(args, options = {}) {
+  const { verbose = false, env = {}, input = null, stdio } = options;
+  logGit(verbose, args);
+
+  const mergedEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    ...env
+  };
+  const result = spawnSync('git', args, {
+    encoding: 'utf8',
+    env: mergedEnv,
+    input,
+    stdio: gitChildStdio(stdio, verbose, input),
+    maxBuffer: 50 * 1024 * 1024
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    const err = new Error(
+      (result.stderr && result.stderr.trim()) ||
+        `git ${args[0]} failed with exit ${result.status}`
+    );
+    err.exitCode = result.status;
+    err.stderr = result.stderr;
+    throw err;
+  }
+
+  return {
+    stdout: (result.stdout || '').trimEnd(),
+    stderr: (result.stderr || '').trimEnd()
+  };
+}
+
+function gitRevListCount(verbose) {
+  const { stdout } = runGit(['rev-list', '--count', 'HEAD'], { verbose: false });
+  const n = parseInt(stdout, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function checkGitRepository(verbose) {
+  try {
+    runGit(['rev-parse', '--is-inside-work-tree'], { verbose });
+  } catch {
+    console.error('Error: Not in a Git repository.');
+    process.exit(1);
+  }
+}
+
+function checkCleanStatus(verbose) {
+  const { stdout } = runGit(['status', '--porcelain'], { verbose });
+  if (stdout.length > 0) {
+    console.error('Error: The repository has uncommitted changes. Exiting.');
+    process.exit(1);
+  }
+}
+
+/**
+ * Oldest-first commits: { hash, authorDate: string (%ai), subject }[]
+ * Uses NUL-delimited records: <hash> <author date>\0<subject>\0
+ */
+function getCommitsOldestFirst(verbose) {
+  const { stdout } = runGit(
+    ['log', '--reverse', '-z', '--pretty=format:%H %ai%x00%s%x00'],
+    { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] }
+  );
+
+  const commits = [];
+  let i = 0;
+  const buf = stdout;
+
+  while (i < buf.length) {
+    while (i < buf.length && buf.charCodeAt(i) === 0) {
+      i += 1;
+    }
+    if (i >= buf.length) break;
+
+    const nul1 = buf.indexOf('\0', i);
+    if (nul1 === -1) break;
+
+    const head = buf.slice(i, nul1);
+    const space = head.indexOf(' ');
+    if (space === -1) break;
+
+    const hash = head.slice(0, space);
+    const authorDate = head.slice(space + 1);
+    if (!periodKeyFromAuthorDate(authorDate, 'day')) {
+      i = nul1 + 1;
+      continue;
+    }
+
+    const nul2 = buf.indexOf('\0', nul1 + 1);
+    if (nul2 === -1) break;
+
+    const subject = buf.slice(nul1 + 1, nul2);
+    commits.push({ hash, authorDate, subject });
+    i = nul2 + 1;
+    while (i < buf.length && buf.charCodeAt(i) === 0) {
+      i += 1;
+    }
+  }
+
+  return commits;
+}
+
+/** Calendar bucket from `git log` %ai (local author date), not UTC. */
+function periodKeyFromAuthorDate(authorDate, strategy) {
+  const m = authorDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  if (strategy === 'year') return y;
+  if (strategy === 'month') return `${y}-${mo}`;
+  return `${y}-${mo}-${d}`;
+}
+
+function getMergeCommitSet(verbose) {
+  const { stdout } = runGit(['rev-list', '--min-parents=2', 'HEAD'], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  return new Set(stdout.split('\n').filter(Boolean));
+}
+
+/**
+ * Maximal consecutive runs with the same period (root → tip order).
+ * Merge commits are never grouped with neighbors: each merge is its own run of length 1
+ * (interactive rebase cannot squash merges; plain `pick` is invalid for them without
+ * `--rebase-merges`, which we use when executing the rebase).
+ */
+function buildRuns(commits, strategy, mergeSet) {
+  if (commits.length === 0) return [];
+
+  const runs = [];
+  let current = null;
+
+  function flush() {
+    if (current && current.commits.length > 0) {
+      runs.push(current);
+    }
+    current = null;
+  }
+
+  for (const c of commits) {
+    if (mergeSet.has(c.hash)) {
+      flush();
+      const p = periodKeyFromAuthorDate(c.authorDate, strategy);
+      runs.push({ period: p, commits: [c] });
+      continue;
+    }
+
+    const p = periodKeyFromAuthorDate(c.authorDate, strategy);
+    if (current === null) {
+      current = { period: p, commits: [c] };
+    } else if (p === current.period) {
+      current.commits.push(c);
+    } else {
+      flush();
+      current = { period: p, commits: [c] };
+    }
+  }
+  flush();
+  return runs;
+}
+
+function determineTopic(commits) {
+  const counts = Object.create(null);
+
+  for (const c of commits) {
+    const m = CC_TYPE_PATTERN.exec(c.subject.trim());
+    if (!m) continue;
+    const type = m[1].toLowerCase();
+    if (!TOPIC_KEYWORDS[type]) continue;
+    counts[type] = (counts[type] || 0) + 1;
+  }
+
+  let best = null;
+  let bestN = 0;
+  for (const [type, n] of Object.entries(counts)) {
+    if (n > bestN) {
+      bestN = n;
+      best = type;
+    }
+  }
+
+  return best ? TOPIC_KEYWORDS[best] : null;
+}
+
+function createSquashMessage(count, period, topic) {
+  if (topic) {
+    return `squash: ${count} commits for ${period} (${topic})`;
+  }
+  return `squash: ${count} commits for ${period}`;
+}
+
+/** For `git commit-tree`: match author identity of the snapshot source commit. */
+function authorEnvFromCommit(hash, verbose) {
+  const { stdout } = runGit(['log', '-1', '--format=%an%n%ae%n%ai', hash], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  const parts = stdout.split('\n');
+  const name = parts[0] || 'unknown';
+  const email = parts[1] || 'unknown@localhost';
+  const date = parts[2] || '';
+  return {
+    GIT_AUTHOR_NAME: name,
+    GIT_AUTHOR_EMAIL: email,
+    GIT_AUTHOR_DATE: date,
+    GIT_COMMITTER_NAME: name,
+    GIT_COMMITTER_EMAIL: email,
+    GIT_COMMITTER_DATE: date
+  };
+}
+
+/**
+ * Replace branch history with one commit per author-year: each commit’s tree is taken from the
+ * last commit in `getCommitsOldestFirst` order for that year (same author-date rules as the rest
+ * of this script). Merges are flattened into a linear chain.
+ */
+async function squashYearHistoryViaSnapshots(verbose, totalBefore, commits, mergeCount) {
+  const lastHashByYear = new Map();
+  const listByYear = new Map();
+
+  for (const c of commits) {
+    const y = periodKeyFromAuthorDate(c.authorDate, 'year');
+    if (!y) continue;
+    lastHashByYear.set(y, c.hash);
+    if (!listByYear.has(y)) listByYear.set(y, []);
+    listByYear.get(y).push(c);
+  }
+
+  const years = [...lastHashByYear.keys()].sort();
+  if (years.length === 0) {
+    console.log('No commits with parseable author dates; nothing to do.');
+    process.exit(0);
+  }
+
+  if (mergeCount > 0) {
+    console.log(
+      `Note: ${mergeCount} merge commit(s) in the current history will be removed — year strategy produces one linear commit per author-year (tree snapshot).`
+    );
+  }
+
+  console.log(`\nFound ${commits.length} commits in log walk; ${years.length} distinct author-year(s).`);
+  console.log('Planned commits (one tree snapshot per year, oldest → newest):');
+  years.forEach((y) => {
+    const h = lastHashByYear.get(y);
+    const n = (listByYear.get(y) || []).length;
+    console.log(`  ${y}  ← ${h.slice(0, 7)}  (${n} source commit(s) in that year)`);
+  });
+
+  const confirmed = await confirmAction(
+    `Replace the current branch with ${years.length} commit(s) (one per year above)?`
+  );
+  if (!confirmed) {
+    console.log('Operation cancelled by user.');
+    process.exit(0);
+  }
+
+  let branchRef;
+  try {
+    branchRef = runGit(['symbolic-ref', '-q', 'HEAD'], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    }).stdout.trim();
+  } catch {
+    branchRef = '';
+  }
+  if (!branchRef || !branchRef.startsWith('refs/')) {
+    console.error('Error: Detached HEAD — checkout a named branch before rewriting year history.');
+    process.exit(1);
+  }
+
+  let parent = null;
+  let tip = null;
+  for (const y of years) {
+    const srcHash = lastHashByYear.get(y);
+    const { stdout: tree } = runGit(['rev-parse', `${srcHash}^{tree}`], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    const yearCommits = listByYear.get(y) || [];
+    const topic = determineTopic(yearCommits);
+    const msg = createSquashMessage(yearCommits.length, y, topic);
+    const authorEnv = authorEnvFromCommit(srcHash, verbose);
+    const treeSha = tree.trim();
+    const args = parent
+      ? ['commit-tree', treeSha, '-p', parent, '-m', msg]
+      : ['commit-tree', treeSha, '-m', msg];
+    const { stdout: newHash } = runGit(args, {
+      verbose,
+      env: { ...process.env, ...authorEnv },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    parent = newHash.trim();
+    tip = parent;
+  }
+
+  runGit(['update-ref', branchRef, tip], {
+    verbose,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  runGit(['reset', '--hard', tip], {
+    verbose,
+    stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'pipe']
+  });
+
+  const totalAfter = gitRevListCount(verbose);
+  console.log('\n' + '='.repeat(50));
+  console.log('Year snapshot rewrite completed (one commit per author-year).');
+  console.log(`Before: ${totalBefore} commits`);
+  console.log(`After: ${totalAfter} commits`);
+  console.log(`Branch: ${branchRef}`);
+  console.log('Years:');
+  years.forEach((p) => console.log(`- ${p}`));
+  console.log('='.repeat(50));
+}
+
+function gitRebaseStatePath(verbose) {
+  for (const sub of ['rebase-merge', 'rebase-apply']) {
+    try {
+      const { stdout } = runGit(['rev-parse', '--git-path', sub], {
+        verbose: false,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      const p = stdout.trim();
+      if (p && fs.existsSync(p)) return p;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+function hasUnmergedPaths(verbose) {
+  try {
+    const { stdout } = runGit(['diff', '--name-only', '--diff-filter=U'], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return Boolean(stdout && stdout.trim());
+  } catch {
+    return false;
+  }
+}
+
+/** True when index matches HEAD (typical state when a squash step would create an empty commit). */
+function indexMatchesHead(verbose) {
+  try {
+    runGit(['diff-index', '--quiet', '--cached', 'HEAD', '--'], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Collapse whitespace so line-broken Git messages (e.g. "would make\\nit empty") still match. */
+function normalizedGitErrorText(err) {
+  const raw = `${err && err.message ? err.message : ''}\n${err && err.stderr ? err.stderr : ''}\n${
+    err && err.stdout ? err.stdout : ''
+  }`;
+  return raw.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function looksLikeEmptySquashFailure(err) {
+  const text = normalizedGitErrorText(err);
+  return (
+    text.includes('would make it empty') ||
+    text.includes('would become empty') ||
+    text.includes('nothing to commit, working tree clean')
+  );
+}
+
+function looksLikeCouldNotApply(err) {
+  return normalizedGitErrorText(err).includes('could not apply');
+}
+
+/**
+ * Interactive squash can fold commits whose combined patch is empty; Git then refuses to amend
+ * unless --allow-empty. Record that commit and drive `git rebase --continue` to completion.
+ */
+function tryFinishRebaseAfterEmptySquash(verbose, rebaseErr, continueEnv) {
+  if (!gitRebaseStatePath(verbose)) return false;
+  if (hasUnmergedPaths(verbose)) return false;
+
+  const likelyEmpty =
+    looksLikeEmptySquashFailure(rebaseErr) ||
+    (indexMatchesHead(verbose) && looksLikeCouldNotApply(rebaseErr));
+  if (!likelyEmpty) return false;
+
+  if (verbose) {
+    console.error(
+      '[squash] Squash step would produce an empty commit — recording with --allow-empty and continuing rebase.'
+    );
+  }
+
+  const amendEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+  try {
+    runGit(['commit', '--amend', '--allow-empty', '--no-edit'], {
+      verbose,
+      stdio: 'inherit',
+      env: amendEnv
+    });
+  } catch {
+    return false;
+  }
+
+  const maxSteps = 2000;
+  for (let i = 0; i < maxSteps; i += 1) {
+    if (!gitRebaseStatePath(verbose)) return true;
+
+    const r = spawnSync('git', ['rebase', '--continue'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: '0',
+        ...continueEnv
+      },
+      stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'pipe'],
+      maxBuffer: 50 * 1024 * 1024
+    });
+
+    if (r.status === 0) {
+      if (!gitRebaseStatePath(verbose)) return true;
+      continue;
+    }
+
+    const faux = {
+      message: `${r.stderr || ''}\n${r.stdout || ''}`,
+      stderr: r.stderr || '',
+      stdout: r.stdout || ''
+    };
+    if (gitRebaseStatePath(verbose) && !hasUnmergedPaths(verbose) && looksLikeEmptySquashFailure(faux)) {
+      try {
+        runGit(['commit', '--amend', '--allow-empty', '--no-edit'], {
+          verbose,
+          stdio: 'inherit',
+          env: amendEnv
+        });
+      } catch {
+        if (verbose && r.stderr) console.error(r.stderr);
+        return false;
+      }
+      continue;
+    }
+
+    if (verbose && (r.stderr || r.stdout)) {
+      console.error((r.stderr || '').trim() || (r.stdout || '').trim());
+    }
+    return false;
+  }
+
+  return false;
+}
+
+function writeTempFile(dir, prefix, content, ext = '.tmp') {
+  const name = `${prefix}-${process.pid}-${Math.random().toString(36).slice(2)}${ext}`;
+  const full = path.join(dir, name);
+  fs.writeFileSync(full, content, 'utf8');
+  return full;
+}
+
+/** Paths for Git’s shell on Windows (Git Bash) tolerate forward slashes. */
+function gitShellPath(filePath) {
+  return filePath.split(path.sep).join('/');
+}
+
+function editorCommand(scriptPath) {
+  const node = gitShellPath(process.execPath);
+  const scr = gitShellPath(scriptPath);
+  return `"${node}" "${scr}"`;
+}
+
+function writeCopyEditorScript(tmpDir, sourcePath) {
+  const body = `'use strict';
+const fs = require('fs');
+const src = ${JSON.stringify(sourcePath)};
+const dst = process.argv[process.argv.length - 1];
+fs.copyFileSync(src, dst);
+`;
+  return writeTempFile(tmpDir, 'editor', body, '.js');
+}
+
+function removeQuiet(p) {
+  try {
+    if (p && fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Rebase onto args for `git rebase -i --rebase-merges`: either `--root` or `<parent>`.
+ */
+function rebaseOntoArgs(firstHash, verbose) {
+  let isRoot = false;
+  try {
+    runGit(['rev-parse', `${firstHash}^`], { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] });
+  } catch {
+    isRoot = true;
+  }
+
+  if (isRoot) {
+    return { ontoArgs: ['--root'] };
+  }
+
+  const { stdout: parent } = runGit(['rev-parse', `${firstHash}^`], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  const { stdout: cnt } = runGit(['rev-list', '--count', `${parent}..HEAD`], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  const n = parseInt(cnt, 10);
+  if (!Number.isFinite(n) || n === 0) {
+    throw new Error('No commits to rebase (empty revision range).');
+  }
+  return { ontoArgs: [parent] };
+}
+
+/**
+ * Writes a GIT_SEQUENCE_EDITOR script that edits Git’s generated todo (with merges)
+ * by turning selected `pick` lines into `squash`.
+ * Each `pick` hash is resolved with `git rev-parse` so shared abbrev prefixes (e.g. root vs
+ * child) never turn the wrong line into `squash` — which would hit “cannot fixup root commit”.
+ */
+function getRootHashesSet(verbose) {
+  const { stdout } = runGit(['rev-list', '--max-parents=0', 'HEAD'], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  return new Set(
+    stdout
+      .split('\n')
+      .filter(Boolean)
+      .map((h) => h.trim().toLowerCase())
+  );
+}
+
+/**
+ * Sequence editor: prefers a *contiguous* block of `pick` lines matching this run (same order as
+ * `git log --reverse`). With `--rebase-merges`, those lines are often split by `label` / `merge` /
+ * `reset`, so no contiguous match exists. By default we then **abort** (exit 1) after writing a
+ * sentinel file: legacy per-hash `pick`→`squash` can replay onto the wrong parent and cause
+ * rename/delete conflicts. Pass `--allow-legacy-fallback` to restore the old non-contiguous
+ * rewrite (risky).
+ * When a contiguous block exists but the pick base is not first in file order, we reorder that
+ * block so the chosen base is `pick` and the rest are `squash` in original file order.
+ */
+function writeSequenceTransformScript(
+  tmpDir,
+  orderedFullHashes,
+  pickFullHash,
+  rootHashesLc,
+  sentinelPath,
+  allowLegacyFallback
+) {
+  const ordered = orderedFullHashes.map((h) => h.toLowerCase());
+  const pickIx = ordered.indexOf(pickFullHash.toLowerCase());
+  if (pickIx < 0) {
+    throw new Error('Pick hash is not in this run commit list.');
+  }
+  const roots = (rootHashesLc || []).map((h) => String(h).toLowerCase());
+  const cfg = {
+    ordered,
+    pickIx,
+    roots,
+    sentinel: sentinelPath || '',
+    allowLegacyFallback: allowLegacyFallback === true
+  };
+  const body = `'use strict';
+const fs = require('fs');
+const { spawnSync } = require('child_process');
+const cfg = ${JSON.stringify(cfg)};
+const dest = process.argv[process.argv.length - 1];
+const ordered = cfg.ordered;
+const pickIx = cfg.pickIx;
+const rootSet = new Set(cfg.roots || []);
+
+function resolveCommit(token) {
+  const r = spawnSync('git', ['rev-parse', '--verify', token + '^{commit}'], {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  if (r.status !== 0) return null;
+  return (r.stdout || '').trim().toLowerCase();
+}
+
+const text = fs.readFileSync(dest, 'utf8');
+const lines = text.split(/\\r?\\n/);
+
+const pickRe = /^(pick)\\s+([0-9a-f]+)\\b(.*)$/i;
+const picks = [];
+for (let i = 0; i < lines.length; i += 1) {
+  const m = pickRe.exec(lines[i]);
+  if (!m) continue;
+  const full = resolveCommit(m[2]);
+  if (full) picks.push({ i, abbrev: m[2], rest: m[3], full });
+}
+
+if (ordered.length <= 1) {
+  fs.writeFileSync(dest, text);
+  process.exit(0);
+}
+
+let start = -1;
+for (let j = 0; j <= picks.length - ordered.length; j += 1) {
+  let ok = true;
+  for (let k = 0; k < ordered.length; k += 1) {
+    if (picks[j + k].full !== ordered[k]) {
+      ok = false;
+      break;
+    }
+    if (k > 0) {
+      const prev = picks[j + k - 1].i;
+      const cur = picks[j + k].i;
+      let betweenOk = true;
+      for (let b = prev + 1; b < cur; b += 1) {
+        const s = (lines[b] || '').trim();
+        if (s === '' || s.startsWith('#')) continue;
+        betweenOk = false;
+        break;
+      }
+      if (!betweenOk) {
+        ok = false;
+        break;
+      }
+    }
+  }
+  if (ok) {
+    start = j;
+    break;
+  }
+}
+
+if (start < 0) {
+  console.error(
+    '[squash-history sequence editor] No contiguous pick block (common with --rebase-merges).'
+  );
+  if (!cfg.allowLegacyFallback) {
+    try {
+      if (cfg.sentinel) fs.writeFileSync(cfg.sentinel, 'no-contiguous-picks\\n', 'utf8');
+    } catch (e) {
+      /* ignore */
+    }
+    console.error(
+      'Skipping this squash step (safe default). Legacy per-hash pick→squash can replay onto the ' +
+        'wrong parent and cause rename/delete conflicts. Linearize related merges first, or re-run with ' +
+        '--allow-legacy-fallback to use the old behavior (risky).'
+    );
+    process.exit(1);
+  }
+  console.error(
+    'Falling back to legacy per-hash pick→squash (may fold into the wrong parent for some merges).'
+  );
+  const firstLc = ordered[pickIx];
+  const squashSet = new Set(ordered.filter((_, i) => i !== pickIx));
+  const out = lines.map((line) => {
+    const m = pickRe.exec(line);
+    if (!m) return line;
+    const full = resolveCommit(m[2]);
+    if (!full || full === firstLc || !squashSet.has(full)) return line;
+    if (rootSet.has(full)) return line;
+    return 'squash ' + m[2] + m[3];
+  });
+  fs.writeFileSync(dest, out.join('\\n'));
+} else {
+  const n = ordered.length;
+  const p = pickIx;
+  const squashIdx = [];
+  for (let k = 0; k < n; k += 1) {
+    if (k !== p) squashIdx.push(k);
+  }
+
+  const blockStart = picks[start].i;
+  const blockEnd = picks[start + n - 1].i;
+  const newBlock = ['pick ' + picks[start + p].abbrev + picks[start + p].rest];
+  for (const k of squashIdx) {
+    const e = picks[start + k];
+    const cmd = rootSet.has(e.full) ? 'pick' : 'squash';
+    newBlock.push(cmd + ' ' + e.abbrev + e.rest);
+  }
+  const merged = lines.slice(0, blockStart).concat(newBlock, lines.slice(blockEnd + 1));
+  fs.writeFileSync(dest, merged.join('\\n'));
+}
+`;
+  return writeTempFile(tmpDir, 'seq-transform', body, '.js');
+}
+
+function isAncestorOf(ancestor, descendant, verbose) {
+  if (ancestor === descendant) return true;
+  try {
+    runGit(['merge-base', '--is-ancestor', ancestor, descendant], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Chooses the `pick` commit and the rest as `squash` targets. Repo root(s) must never be
+ * squashed. Sibling commits (neither is ancestor of the other) are resolved via rev-list order.
+ */
+function resolvePickAndSquashHashes(run, verbose) {
+  const { commits } = run;
+  if (commits.length <= 1) {
+    return { firstHash: commits[0] ? commits[0].hash : null, squashTargets: [] };
+  }
+
+  const roots = getRootHashesSet(verbose);
+  const rootsInRun = commits.filter((c) => roots.has(c.hash.toLowerCase()));
+  if (rootsInRun.length > 0) {
+    let pick = rootsInRun[0];
+    if (rootsInRun.length > 1) {
+      const { stdout: order } = runGit(['rev-list', '--reverse', 'HEAD'], {
+        verbose: false,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      const rset = new Set(rootsInRun.map((r) => r.hash.toLowerCase()));
+      for (const line of order.split('\n')) {
+        const h = line.trim().toLowerCase();
+        if (rset.has(h)) {
+          pick = rootsInRun.find((r) => r.hash.toLowerCase() === h) || pick;
+          break;
+        }
+      }
+    }
+    const firstHash = pick.hash;
+    const squashTargets = commits
+      .filter((d) => d.hash.toLowerCase() !== firstHash.toLowerCase())
+      .map((d) => d.hash);
+    if (verbose) {
+      console.error(`[squash] pick base ${firstHash.slice(0, 7)} (repository root in this run)`);
+    }
+    return { firstHash, squashTargets };
+  }
+
+  for (const c of commits) {
+    const isOldest = commits.every(
+      (d) =>
+        d.hash.toLowerCase() === c.hash.toLowerCase() || isAncestorOf(c.hash, d.hash, verbose)
+    );
+    if (isOldest) {
+      const squashTargets = commits
+        .filter((d) => d.hash.toLowerCase() !== c.hash.toLowerCase())
+        .map((d) => d.hash);
+      if (verbose && commits[0].hash.toLowerCase() !== c.hash.toLowerCase()) {
+        console.error(
+          `[squash] pick base ${c.hash.slice(0, 7)} (ancestor of all in run), not log-first ${commits[0].hash.slice(0, 7)}`
+        );
+      }
+      return { firstHash: c.hash, squashTargets };
+    }
+  }
+
+  const { stdout: order } = runGit(['rev-list', '--reverse', 'HEAD'], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  const inRun = new Set(commits.map((c) => c.hash.toLowerCase()));
+  let firstFromTopo = null;
+  for (const line of order.split('\n')) {
+    const h = line.trim().toLowerCase();
+    if (inRun.has(h)) {
+      firstFromTopo = commits.find((c) => c.hash.toLowerCase() === h);
+      break;
+    }
+  }
+  if (firstFromTopo) {
+    const firstHash = firstFromTopo.hash;
+    const squashTargets = commits
+      .filter((d) => d.hash.toLowerCase() !== firstHash.toLowerCase())
+      .map((d) => d.hash);
+    if (verbose) {
+      console.error(
+        `[squash] pick base ${firstHash.slice(0, 7)} (first in rev-list among run; siblings / no single ancestor)`
+      );
+    }
+    return { firstHash, squashTargets };
+  }
+
+  const firstHash = commits[0].hash;
+  const squashTargets = commits.slice(1).map((c) => c.hash);
+  if (verbose) {
+    console.error('[squash] warning: fallback to log order for pick');
+  }
+  return { firstHash, squashTargets };
+}
+
+/**
+ * @returns {boolean|'topo-skip'} true if an interactive rebase was finished; false if this run was
+ * skipped (e.g. cannot squash roots); 'topo-skip' if rebase was aborted because picks were not
+ * contiguous under --rebase-merges (safe default unless --allow-legacy-fallback).
+ */
+function squashOneRun(run, verbose, tmpDir, rebaseOptions = {}) {
+  const strictDirectoryRenames = rebaseOptions.strictDirectoryRenames === true;
+  const allowLegacyFallback = rebaseOptions.allowLegacyFallback === true;
+  const { commits } = run;
+  if (commits.length <= 1) return false;
+
+  const { firstHash, squashTargets } = resolvePickAndSquashHashes(run, verbose);
+  if (!firstHash || squashTargets.length === 0) return false;
+
+  const roots = getRootHashesSet(verbose);
+  if (squashTargets.some((t) => roots.has(t.toLowerCase()))) {
+    console.warn(
+      `[squash] Skipping ${run.period}: Git cannot squash a second repository root (max-parents=0). ` +
+        'This often happens when the same calendar period produced two parallel squash commits under --rebase-merges. ' +
+        'Merge those commits into one line of history (or use a linear clone), then re-run this script.'
+    );
+    return false;
+  }
+
+  const orderedFullHashes = commits.map((c) => c.hash);
+  const rootList = [...roots].map((h) => h.toLowerCase());
+
+  const topic = determineTopic(commits);
+  const message = createSquashMessage(commits.length, run.period, topic);
+
+  const { ontoArgs } = rebaseOntoArgs(firstHash, verbose);
+
+  const msgPath = writeTempFile(tmpDir, 'squash-msg', `${message}\n`);
+  const sentinelNoContiguous = path.join(tmpDir, 'squash-history-no-contiguous-picks');
+  removeQuiet(sentinelNoContiguous);
+  const seqScript = writeSequenceTransformScript(
+    tmpDir,
+    orderedFullHashes,
+    firstHash,
+    rootList,
+    sentinelNoContiguous,
+    allowLegacyFallback
+  );
+  const msgScript = writeCopyEditorScript(tmpDir, msgPath);
+  const sequenceEditorCmd = editorCommand(seqScript);
+  const messageEditorCmd = editorCommand(msgScript);
+  const noopSeqScript = writeTempFile(
+    tmpDir,
+    'noop-seq',
+    `'use strict';
+const fs = require('fs');
+const dst = process.argv[process.argv.length - 1];
+const t = fs.readFileSync(dst, 'utf8');
+fs.writeFileSync(dst, t);
+`,
+    '.js'
+  );
+  const noopSequenceEditorCmd = editorCommand(noopSeqScript);
+
+  // Squash + --rebase-merges often replays merges where one side renamed dirs and the other added
+  // files under old paths; ORT then emits CONFLICT (file location). `merge.directoryRenames=false`
+  // avoids that, but is only honored by the `recursive` merge strategy (not ORT).
+  const rebaseCmd = strictDirectoryRenames
+    ? ['rebase', '-i', '--rebase-merges', ...ontoArgs]
+    : [
+        '-c',
+        'merge.directoryRenames=false',
+        'rebase',
+        '-i',
+        '--rebase-merges',
+        '-s',
+        'recursive',
+        ...ontoArgs
+      ];
+
+  const rebaseEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_SEQUENCE_EDITOR: sequenceEditorCmd,
+    GIT_EDITOR: messageEditorCmd
+  };
+  const continueEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_SEQUENCE_EDITOR: noopSequenceEditorCmd,
+    GIT_EDITOR: messageEditorCmd
+  };
+
+  try {
+    const rb = spawnSync('git', rebaseCmd, {
+      encoding: 'utf8',
+      env: rebaseEnv,
+      stdio: ['ignore', verbose ? 'inherit' : 'pipe', 'pipe'],
+      maxBuffer: 50 * 1024 * 1024
+    });
+
+    if (rb.status !== 0) {
+      const combined = [rb.stderr, rb.stdout].filter(Boolean).join('\n').trim();
+      const msg = combined || `git ${rebaseCmd[0]} failed with exit ${rb.status}`;
+      const rebaseErr = new Error(msg);
+      rebaseErr.stderr = rb.stderr || '';
+      rebaseErr.stdout = rb.stdout || '';
+      if (verbose && combined) console.error(combined);
+
+      if (fs.existsSync(sentinelNoContiguous)) {
+        removeQuiet(sentinelNoContiguous);
+        try {
+          runGit(['rebase', '--abort'], { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] });
+        } catch {
+          /* ignore */
+        }
+        return 'topo-skip';
+      }
+
+      if (!tryFinishRebaseAfterEmptySquash(verbose, rebaseErr, continueEnv)) {
+        throw rebaseErr;
+      }
+    }
+  } finally {
+    removeQuiet(sentinelNoContiguous);
+    removeQuiet(noopSeqScript);
+    removeQuiet(msgPath);
+    removeQuiet(seqScript);
+    removeQuiet(msgScript);
+  }
+  return true;
+}
+
+function squishableRunKey(run) {
+  return `${run.period}\0${run.commits.map((c) => c.hash).join('\0')}`;
+}
+
+async function confirmAction(message) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`${message} (y/n): `, (answer) => {
+      rl.close();
+      const a = (answer || '').trim().toLowerCase();
+      resolve(a === 'y' || a === 'yes');
+    });
+  });
+}
+
+function uniquePeriodLabels(runs) {
+  const seen = new Set();
+  const out = [];
+  for (const r of runs) {
+    if (!seen.has(r.period)) {
+      seen.add(r.period);
+      out.push(r.period);
+    }
+  }
+  return out.sort();
+}
+
+async function squashHistory(strategy, verbose, options = {}) {
+  const strictDirectoryRenames = options.strictDirectoryRenames === true;
+  const allowLegacyFallback = options.allowLegacyFallback === true;
+  if (!STRATEGIES.includes(strategy)) {
+    console.error(
+      `Error: Unknown strategy '${strategy}'. Valid values: ${STRATEGIES.join(', ')}.`
+    );
+    process.exit(1);
+  }
+
+  checkGitRepository(verbose);
+  checkCleanStatus(verbose);
+
+  const totalBefore = gitRevListCount(verbose);
+  if (totalBefore === 0) {
+    console.log('No commits found in the repository.');
+    process.exit(0);
+  }
+
+  let commits = getCommitsOldestFirst(verbose);
+  if (commits.length === 0) {
+    console.log('No commits found in the repository.');
+    process.exit(0);
+  }
+
+  let mergeSet = getMergeCommitSet(verbose);
+
+  if (strategy === 'year') {
+    if (allowLegacyFallback) {
+      console.warn(
+        'Note: --allow-legacy-fallback only affects month/day; year always uses snapshot rewrite.'
+      );
+    }
+    if (strictDirectoryRenames) {
+      console.warn(
+        'Note: --strict-directory-renames only affects month/day; year uses snapshot rewrite.'
+      );
+    }
+    await squashYearHistoryViaSnapshots(verbose, totalBefore, commits, mergeSet.size);
+    return;
+  }
+
+  let runs = buildRuns(commits, strategy, mergeSet);
+  let periodLabels = uniquePeriodLabels(runs);
+  const squishable = runs.filter((r) => r.commits.length > 1);
+
+  if (squishable.length === 0) {
+    console.log('No multi-commit periods to squash (each period has at most one commit).');
+    process.exit(0);
+  }
+
+  if (mergeSet.size > 0) {
+    console.log(
+      `Note: ${mergeSet.size} merge commit(s) in history — rebases use --rebase-merges; merges are not squashed.`
+    );
+  }
+
+  console.log(`\nFound ${commits.length} commits to process`);
+  console.log(`Grouped into ${periodLabels.length} period label(s); ${squishable.length} segment(s) to squash`);
+  console.log('Periods (calendar labels):');
+  periodLabels.forEach((p) => console.log(`- ${p}`));
+
+  const confirmed = await confirmAction('Proceed with squash?');
+  if (!confirmed) {
+    console.log('Operation cancelled by user.');
+    process.exit(0);
+  }
+
+  console.log('\nStarting squash process...');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'squash-history-'));
+  const totalSquashSteps = squishable.length;
+  let step = 0;
+  const skippedRunKeys = new Set();
+  let skippedSegmentCount = 0;
+
+  try {
+    while (true) {
+      commits = getCommitsOldestFirst(verbose);
+      mergeSet = getMergeCommitSet(verbose);
+      runs = buildRuns(commits, strategy, mergeSet);
+      const next = runs.find(
+        (r) => r.commits.length > 1 && !skippedRunKeys.has(squishableRunKey(r))
+      );
+      if (!next) break;
+
+      step += 1;
+      console.log(`[${step}/${totalSquashSteps}] Processing ${next.period} (${next.commits.length} commits)`);
+
+      const commitsBefore = gitRevListCount(verbose);
+      let didRebase = false;
+      try {
+        didRebase = squashOneRun(next, verbose, tmpDir, {
+          strictDirectoryRenames,
+          allowLegacyFallback
+        });
+      } catch (e) {
+        console.error(`Error during squash for period ${next.period}:`, e.message || e);
+        console.error('Hint: To undo this failed rebase: git rebase --abort');
+        try {
+          runGit(['rebase', '--abort'], { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] });
+        } catch {
+          /* ignore */
+        }
+        process.exit(1);
+      }
+
+      if (!didRebase || didRebase === 'topo-skip') {
+        skippedRunKeys.add(squishableRunKey(next));
+        skippedSegmentCount += 1;
+        if (didRebase === 'topo-skip') {
+          console.warn(
+            `⊘ Skipped ${next.period} (${next.commits.length} commit(s)): no contiguous pick block under --rebase-merges.`
+          );
+        } else {
+          console.log(`⊘ Left ${next.commits.length} commit(s) for ${next.period} unchanged (skipped).`);
+        }
+        continue;
+      }
+
+      const commitsAfter = gitRevListCount(verbose);
+      if (commitsAfter >= commitsBefore) {
+        console.error(
+          `Squash step did not reduce history (${commitsBefore} → ${commitsAfter} commits). ` +
+            'Stopping to avoid an infinite loop. If you were mid-rebase, run: git rebase --abort'
+        );
+        process.exit(1);
+      }
+
+      console.log(`✓ Successfully squashed ${next.commits.length} commits for ${next.period}`);
+    }
+
+    const totalAfter = gitRevListCount(verbose);
+    periodLabels = uniquePeriodLabels(
+      buildRuns(getCommitsOldestFirst(verbose), strategy, getMergeCommitSet(verbose))
+    );
+
+    console.log('\n' + '='.repeat(50));
+    console.log('Commit merging completed.');
+    if (skippedSegmentCount > 0) {
+      console.log(
+        `Note: ${skippedSegmentCount} segment(s) were skipped (often two roots for one calendar period after a merge-preserving squash).`
+      );
+    }
+    console.log(`Before: ${totalBefore} commits`);
+    console.log(`After: ${totalAfter} commits`);
+    console.log(`Reduced by: ${totalBefore - totalAfter} commits`);
+    console.log('Processed periods:');
+    periodLabels.forEach((p) => console.log(`- ${p}`));
+    console.log('='.repeat(50));
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function main() {
+  const { strategy, verbose, strictDirectoryRenames, allowLegacyFallback } = parseArgs(process.argv);
+
+  if (!strategy) {
+    console.error(
+      'Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day> [--verbose] [--strict-directory-renames] [--allow-legacy-fallback]  (year: one commit per author-year via snapshot rewrite)'
+    );
+    console.error(`Available strategies: ${STRATEGIES.join(', ')}`);
+    process.exit(1);
+  }
+
+  squashHistory(strategy, verbose, {
+    strictDirectoryRenames,
+    allowLegacyFallback
+  }).catch((err) => {
+    console.error('Unexpected error:', err);
+    process.exit(1);
+  });
+}
+
+if (require.main === module) {
+  main();
+}

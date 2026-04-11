@@ -1,4 +1,4 @@
-# README.md
+# Go to [.git_alias](../../editors/.git_alias)
 
 https://medium.com/@elviocavalcante/5-steps-to-improve-your-terminal-appearance-on-mac-osx-f58b20058c84
 

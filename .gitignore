@@ -1,1 +1,7 @@
 .DS_Store
+log/
+logs/
+[Oo][Bb][Jj]/
+[Bb][Ii][Nn]/
+tmp/
+temp/
