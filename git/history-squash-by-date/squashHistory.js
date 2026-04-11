@@ -3,63 +3,116 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const readline = require('readline');
 
-/**
- * List of valid strategies for commit grouping
- * @type {string[]}
- */
-const STRATEGIES = ['year', 'month', 'day'];
+const config = {
+  strategies: ['year', 'month', 'day'],
+  topicKeywords: {
+    // Core types from Conventional Commits specification
+    feat: 'new features',
+    fix: 'bug fixes',
+    docs: 'documentation updates',
+    style: 'code style changes (formatting, missing semi‑colons, etc.)',
+    refactor: 'code refactoring',
+    perf: 'performance improvements',
+    test: 'adding or updating tests',
+    build: 'build system or dependencies changes',
+    ci: 'continuous integration configuration changes',
+    chore: 'maintenance tasks',
+    revert: 'reverted changes',
 
-/**
- * Mapping of Conventional Commits keywords to human‑readable topics
- * @type {Object<string, string>}
- */
-const TOPIC_KEYWORDS = {
-  // Core types from Conventional Commits specification
-  feat: 'new features',
-  fix: 'bug fixes',
-  docs: 'documentation updates',
-  style: 'code style changes (formatting, missing semi‑colons, etc.)',
-  refactor: 'code refactoring',
-  perf: 'performance improvements',
-  test: 'adding or updating tests',
-  build: 'build system or dependencies changes',
-  ci: 'continuous integration configuration changes',
-  chore: 'maintenance tasks',
-  revert: 'reverted changes',
-
-  // Extended types (common community additions)
-  wip: 'work in progress',
-  security: 'security fixes',
-  i18n: 'internationalization and localization',
-  accessibility: 'accessibility improvements',
-  deps: 'dependency updates',
-  config: 'configuration changes',
-  deploy: 'deployment configuration changes',
-  ui: 'user interface changes',
-  ux: 'user experience improvements',
-  api: 'API changes',
-  db: 'database schema changes',
-  logging: 'logging improvements',
-  monitoring: 'monitoring and observability changes'
+    // Extended types (common community additions)
+    wip: 'work in progress',
+    security: 'security fixes',
+    i18n: 'internationalization and localization',
+    accessibility: 'accessibility improvements',
+    deps: 'dependency updates',
+    config: 'configuration changes',
+    deploy: 'deployment configuration changes',
+    ui: 'user interface changes',
+    ux: 'user experience improvements',
+    api: 'API changes',
+    db: 'database schema changes',
+    logging: 'logging improvements',
+    monitoring: 'monitoring and observability changes'
+  }
 };
 
 /**
- * Parses command‑line arguments for the --strategy parameter
- * @returns {string|null} The strategy value or null if not found
+ * Escapes double quotes in a commit message to prevent shell interpretation issues
+ * when used in command-line operations.
+ *
+ * @param {string} message - The original commit message that may contain double quotes
+ * @returns {string} The escaped commit message with double quotes replaced by \"
+ *
+ * @example
+ * escapeCommitMessage('Fix "broken" feature') // returns 'Fix \"broken\" feature'
+ */
+function escapeCommitMessage(message) {
+  return message.replace(/"/g, '\\"');
+}
+
+/**
+ * Safely removes a temporary file if it exists.
+ * Catches and logs any errors that occur during the deletion process
+ * without throwing exceptions.
+ *
+ * @param {string} tempFile - The full path to the temporary file to be removed
+ * @returns {void}
+ * @example
+ * cleanup('/tmp/rebase-commands-123');
+ */
+function cleanup(tempFile) {
+  try {
+    if (fs.existsSync(tempFile)) {
+      fs.unlinkSync(tempFile);
+    }
+  } catch (e) {
+    console.warn('Cleanup failed:', e.message);
+  }
+}
+
+/**
+ * Prompts the user for confirmation via the command line.
+ * Asks a yes/no question and resolves with a boolean based on user input.
+ *
+ * @param {string} message - The question or prompt to display to the user
+ * @returns {Promise<boolean>} A promise that resolves to true if the user answers 'y' or 'yes',
+ *          and false for any other response (including 'n' or empty input)
+ * @example
+ * const confirmed = await confirmAction('Proceed with squash?');
+ * if (confirmed) {
+ *   // perform squash operation
+ * }
+ */
+function confirmAction(message) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`${message} (y/n): `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y');
+    });
+  });
+}
+
+/**
+ * Parses command‑line arguments for the --strategy and --verbose parameters
+ * @returns {Object} Object with strategy and verbose flag
  */
 function parseArgs() {
   const args = process.argv.slice(2);
   let strategy = null;
+  let verbose = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--strategy' && i + 1 < args.length) {
       strategy = args[i + 1];
-      break;
+    } else if (args[i] === '--verbose') {
+      verbose = true;
     }
   }
 
-  return strategy;
+  return { strategy, verbose };
 }
 
 /**
@@ -105,12 +158,15 @@ function getCommitHistory() {
  * @returns {Object|null} Object with year, month, day or null if parsing failed
  */
 function extractDate(commitLine) {
-  const dateMatch = commitLine.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (!dateMatch) return null;
+  const parts = commitLine.split(' ');
+  if (parts.length < 3) return null;
+  const dateStr = parts[1]; // вторая колонка — дата
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
   return {
-    year: dateMatch[1],
-    month: dateMatch[2],
-    day: dateMatch[3]
+    year: match[1],
+    month: match[2],
+    day: match[3]
   };
 }
 
@@ -144,6 +200,15 @@ function groupCommitsByPeriod(commits, strategy) {
     groups[periodKey].push(commit);
   });
 
+  // Сортировка коммитов по дате внутри каждой группы (от старых к новым)
+  Object.keys(groups).forEach(key => {
+    groups[key].sort((a, b) => {
+      const dateA = extractDate(a);
+      const dateB = extractDate(b);
+      return new Date(`${dateA.year}-${dateA.month}-${dateA.day}`) - new Date(`${dateB.year}-${dateB.month}-${dateB.day}`);
+    });
+  });
+
   return groups;
 }
 
@@ -157,7 +222,7 @@ function determineTopic(commits) {
 
   commits.forEach(commit => {
     const message = commit.toLowerCase();
-    Object.keys(TOPIC_KEYWORDS).forEach(keyword => {
+    Object.keys(config.topicKeywords).forEach(keyword => {
       if (message.includes(keyword)) {
         topicCounts[keyword] = (topicCounts[keyword] || 0) + 1;
       }
@@ -175,7 +240,7 @@ function determineTopic(commits) {
     }
   });
 
-  return dominantKeyword ? TOPIC_KEYWORDS[dominantKeyword] : null;
+  return dominantKeyword ? config.topicKeywords[dominantKeyword] : null;
 }
 
 /**
@@ -197,16 +262,19 @@ function createSquashMessage(count, period, topic) {
  * @param {string[]} commits - Array of commit lines for the period
  * @param {string} period - Period identifier
  * @param {string} squashMessage - Message for the squashed commit
+ * @param {boolean} verbose - Verbose output flag
  */
-function performSquash(commits, period, squashMessage) {
-  if (commits.length <= 1) return; // Nothing to squash
+function performSquash(commits, period, squashMessage, verbose) {
+  if (commits.length <= 1) {
+    if (verbose) console.log(`Skipping ${period}: only ${commits.length} commit(s)`);
+    return; // Nothing to squash
+  }
 
   console.log(`Processing period: ${period} (${commits.length} commits)`);
 
-  // Get the oldest commit hash (first in the group)
-  const oldestCommit = commits[commits.length - 1].split(' ')[0];
+  // Get the oldest commit hash (first in the sorted group)
+  const oldestCommit = commits[0].split(' ')[0];
 
-  // Start interactive rebase from the commit before the oldest one
   try {
     // Create a temporary file with rebase commands
     const rebaseCommands = commits
@@ -219,27 +287,26 @@ function performSquash(commits, period, squashMessage) {
     const tempFile = path.join(process.cwd(), '.git', 'rebase-commands');
     fs.writeFileSync(tempFile, rebaseCommands);
 
-    // Set the editor to use our commands and perform interactive rebase
-    execSync(`GIT_SEQUENCE_EDITOR="cat ${tempFile} >" git rebase -i ${oldestCommit}^`, {
-      stdio: 'inherit'
+    // Perform interactive rebase using autosquash approach
+    execSync(`GIT_SEQUENCE_EDITOR="true" git rebase -i ${oldestCommit}^`, {
+      stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'inherit']
     });
 
     // Amend the commit message with the squash message
-    execSync(`git commit --amend -m "${squashMessage}"`, { stdio: 'inherit' });
+    const safeMessage = escapeCommitMessage(squashMessage);
+    execSync(`git commit --amend -m "${safeMessage}"`, {
+      stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'inherit']
+    });
 
     // Clean up: remove the temporary file
-    fs.unlinkSync(tempFile);
+    cleanup(tempFile);
+
+    console.log(`✓ Successfully squashed ${commits.length} commits for ${period}`);
   } catch (error) {
     console.error(`Error during squash for period ${period}:`, error.message);
     // Attempt to clean up the temporary file if it exists
-    try {
-      const tempFile = path.join(process.cwd(), '.git', 'rebase-commands');
-      if (fs.existsSync(tempFile)) {
-        fs.unlinkSync(tempFile);
-      }
-    } catch (cleanupError) {
-      console.warn('Failed to clean up temporary file:', cleanupError.message);
-    }
+    const tempFile = path.join(process.cwd(), '.git', 'rebase-commands');
+    cleanup(tempFile);
     // Abort the rebase if it's in progress
     try {
       execSync('git rebase --abort', { stdio: 'ignore' });
@@ -253,11 +320,12 @@ function performSquash(commits, period, squashMessage) {
 /**
  * Main function to orchestrate the squash process
  * @param {string} strategy - Grouping strategy ('year', 'month', or 'day')
+ * @param {boolean} verbose - Verbose output flag
  */
-function squashHistory(strategy) {
+async function squashHistory(strategy, verbose) {
   // Validate strategy
-  if (!STRATEGIES.includes(strategy)) {
-    console.error(`Error: Unknown strategy '${strategy}'. Valid values: year, month, day.`);
+  if (!config.strategies.includes(strategy)) {
+    console.error(`Error: Unknown strategy '${strategy}'. Valid values: ${config.strategies.join(', ')}.`);
     process.exit(1);
   }
 
@@ -278,31 +346,62 @@ function squashHistory(strategy) {
   const groupedCommits = groupCommitsByPeriod(commits, strategy);
   const processedPeriods = Object.keys(groupedCommits).sort();
 
-  // Process each period
-  processedPeriods.forEach(period => {
+  if (processedPeriods.length === 0) {
+    console.log('No periods found for grouping with strategy: ' + strategy);
+    process.exit(0);
+  }
+
+  // Show summary before proceeding
+  console.log(`\nFound ${totalBefore} commits to process`);
+  console.log(`Grouped into ${processedPeriods.length} periods`);
+  console.log('Periods to process:');
+  processedPeriods.forEach(period => console.log(`- ${period}`));
+
+  // Confirm action
+  const confirmed = await confirmAction('Proceed with squash?');
+  if (!confirmed) {
+    console.log('Operation cancelled by user.');
+    process.exit(0);
+  }
+
+  console.log('\nStarting squash process...');
+
+  // Process each period with progress indication
+  for (let i = 0; i < processedPeriods.length; i++) {
+    const period = processedPeriods[i];
     const periodCommits = groupedCommits[period];
     const topic = determineTopic(periodCommits);
     const squashMessage = createSquashMessage(periodCommits.length, period, topic);
-    performSquash(periodCommits, period, squashMessage);
-  });
 
-  // Generate report
+    console.log(`[${i + 1}/${processedPeriods.length}] `);
+    performSquash(periodCommits, period, squashMessage, verbose);
+  }
+
+  // Generate final report
   const totalAfter = processedPeriods.length;
-  console.log('\nCommit merging completed.');
+  console.log('\n' + '='.repeat(50));
+  console.log('Commit merging completed.');
   console.log(`Before: ${totalBefore} commits`);
   console.log(`After: ${totalAfter} commits`);
+  console.log(`Reduced by: ${totalBefore - totalAfter} commits`);
   console.log('Processed periods:');
   processedPeriods.forEach(period => console.log(`- ${period}`));
+  console.log('='.repeat(50));
 }
 
 // Execute the script if run directly
 if (require.main === module) {
-  const strategy = parseArgs();
+  const { strategy, verbose } = parseArgs();
+
   if (!strategy) {
-    console.error('Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day>');
+    console.error('Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day> [--verbose]');
+    console.error('Available strategies: ' + config.strategies.join(', '));
     process.exit(1);
   }
-  squashHistory(strategy);
-}
 
-module.exports = squashHistory;
+  // Run the main function
+  squashHistory(strategy, verbose).catch(error => {
+    console.error('Unexpected error:', error);
+    process.exit(1);
+  });
+}

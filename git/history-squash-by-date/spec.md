@@ -1,60 +1,130 @@
-# history-squash-by-date
+# Specification for `squashHistory.js` Script
 
-## Specification
+## Purpose
 
-### Files
+The script automates the squashing (merging) of Git commits by periods (year/month/day) with topic analysis based on Conventional Commits. It is designed to simplify Git repository history.
 
-1. `spec.md` — specification.
-2. `prompt.md` — prompt for the agent.
-3. `use_cases.md` — usage scenarios.
+## Functional Requirements
 
----
+### Main Functions
 
-**Name:** `squashHistory`
+* Grouping commits by periods: year, month, or day.
+* Analyzing commit topics based on Conventional Commits keywords.
+* Creating meaningful squash commit messages.
+* Performing interactive rebase for squashing.
+* Generating a report on the operation.
 
-**Purpose:** a Node.js script that merges commits in a Git repository according to a specified strategy and rewrites the history.
+### Input Parameters
 
-**Input parameter:**
-* `strategy` — a string defining the commit merging strategy. Valid values:
-    * `year` — merge all commits for each calendar year into one;
-    * `month` — merge commits for each month into one;
-    * `day` — merge commits for each day into one.
+| Parameter | Type | Required | Description |
+|---------|---------|-------------|-------------|
+| `--strategy` | `string` | Yes | Grouping strategy: `year`, `month`, or `day` |
+| `--verbose` | flag | No | Detailed output of all Git operations |
 
-**Commit message format:**
-```
-<operation>: <count> commits for <period> (<optional: topic>)
-```
-Where:
-* `<operation>` — `squash`;
-* `<count>` — the number of commits merged in this period;
-* `<period>` — the period in the following format:
-    * for `year`: `YYYY` (e.g., `2023`);
-    * for `month`: `YYYY-MM` (e.g., `2023-05`);
-    * for `day`: `YYYY-MM-DD` (e.g., `2023-10-01`);
-* `<optional: topic>` — the most frequent keyword in the commit messages of the period (e.g., `bug fixes`, `feature updates`, `refactoring`). If no topic can be determined, this field is omitted.
+### Output Data
 
-**Requirements:**
-1. The script must be executed in the root of a Git repository.
-2. Before performing operations, the script checks that:
-    * the repository is initialized;
-    * there are no uncommitted changes (`git status` is clean);
-    * the current branch is not protected (to avoid conflicts with protection rules).
-3. `git rebase -i` is used to merge commits.
-4. After successful execution, the script outputs a report:
-    * how many commits there were before merging;
-    * how many commits remain after merging;
-    * which periods (years/months/days) were processed.
-5. On errors, the script outputs an informative message and exits with code `1`.
-6. The script must not rewrite history in repositories with `git --bare` enabled.
+* Modified Git repository history (squashed commits).
+* Console report on the completed operation.
 
-**Dependencies:**
-* Node.js (version 14+);
+## Technical Requirements
+
+### Dependencies
+
+* Node.js (version 12+).
 * Git (version 2.0+).
 
-**Return value:**
-* Exit code `0` on success.
-* Exit code `1` on error.
+### Execution Environment
 
-*(Продолжение следует — в следующем сообщении будет prompt.md, затем use_cases.md)*
+* Must be run in the root of a Git repository.
+* Repository must be clean (no uncommitted changes).
 
-Хотите, я уточню какой‑то раздел спецификации или сразу продолжу с остальными файлами?
+### Error Handling
+
+The script must handle the following scenarios:
+
+* Running outside a Git repository → error and exit.
+* Uncommitted changes present → error and exit.
+* Invalid grouping strategy → error and exit.
+* No commits to process → informational message.
+* Errors during rebase → abort operation, clean up temporary files, informative message.
+
+## Data Format
+
+### Input (Git log)
+
+Git log output format:
+```
+<hash> <date> <message>
+```
+
+Example:
+```
+a1b2c3d4 2023-10-01 14:30:00 +0300 feat: add new feature
+```
+
+### Output (Squash Message)
+
+Squash commit message format:
+```
+squash: <count> commits for <period> (<topic>)
+```
+or without topic:
+```
+squash: <count> commits for <period>
+```
+
+Examples:
+* `squash: 5 commits for 2023 (new features)`;
+* `squash: 3 commits for 2023-10`.
+
+## Configuration
+
+### Supported Strategies
+
+* `year` — grouping by years (e.g., `2023`);
+* `month` — grouping by months (e.g., `2023-10`);
+* `day` — grouping by days (e.g., `2023-10-01`).
+
+### Topic Keywords
+
+The script uses the `config.topicKeywords` dictionary to map keywords in commit messages to human‑readable topics. Supported:
+
+* Standard Conventional Commits types (`feat`, `fix`, `docs`, etc.).
+* Extended community types (`wip`, `security`, `i18n`, etc.).
+
+## Execution Flow
+
+1. Parse command‑line arguments.
+2. Check environment (Git repository, clean state).
+3. Retrieve commit history via `git log`.
+4. Group commits by selected strategy.
+5. Sort commits within groups by date (oldest to newest).
+6. Prompt user for confirmation before starting squash.
+7. For each period:
+    * Determine dominant topic (if any).
+    * Create squash message.
+    * Perform squash via interactive rebase.
+    * Log progress.
+8. Generate final report.
+
+## Security
+
+* Confirmation before potentially dangerous operations (rebase).
+* Escaping commit messages before using in Git commands.
+* Cleaning up temporary files after completion or error.
+* Using `GIT_SEQUENCE_EDITOR="true"` for cross‑platform compatibility.
+
+## UX Features
+
+* Progress indicator: `[1/5] Processing 2023...`.
+* Detailed output when using the `--verbose` flag.
+* Informative error messages.
+* Final report with commit savings.
+
+## Limitations
+
+* Works only in local repositories.
+* Requires a clean repository state.
+* Does not support squashing merge commits.
+* Does not handle commits without dates.
+
