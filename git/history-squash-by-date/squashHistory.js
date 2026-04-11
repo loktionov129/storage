@@ -287,9 +287,13 @@ function performSquash(commits, period, squashMessage, verbose) {
     const tempFile = path.join(process.cwd(), '.git', 'rebase-commands');
     fs.writeFileSync(tempFile, rebaseCommands);
 
-    // Perform interactive rebase using autosquash approach
-    execSync(`GIT_SEQUENCE_EDITOR="true" git rebase -i ${oldestCommit}^`, {
-      stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'inherit']
+    // Cross‑platform way: use env option to set GIT_SEQUENCE_EDITOR
+    execSync('git rebase -i ' + oldestCommit + '^', {
+      stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'inherit'],
+      env: {
+        ...process.env,
+        GIT_SEQUENCE_EDITOR: 'true'
+      }
     });
 
     // Amend the commit message with the squash message
