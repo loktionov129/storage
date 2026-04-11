@@ -3,6 +3,9 @@
 /**
  * Squashes Git history by calendar period (year / month / day) with optional
  * Conventional-Commits–style topic labels. See spec.md and use_cases.md.
+ *
+ * `--strategy year` rewrites the branch to one linear commit per author-year (tree snapshots);
+ * month/day still use interactive rebase with merge preservation where applicable.
  */
 
 const { spawnSync } = require('child_process');
@@ -290,6 +293,130 @@ function createSquashMessage(count, period, topic) {
     return `squash: ${count} commits for ${period} (${topic})`;
   }
   return `squash: ${count} commits for ${period}`;
+}
+
+/** For `git commit-tree`: match author identity of the snapshot source commit. */
+function authorEnvFromCommit(hash, verbose) {
+  const { stdout } = runGit(['log', '-1', '--format=%an%n%ae%n%ai', hash], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  const parts = stdout.split('\n');
+  const name = parts[0] || 'unknown';
+  const email = parts[1] || 'unknown@localhost';
+  const date = parts[2] || '';
+  return {
+    GIT_AUTHOR_NAME: name,
+    GIT_AUTHOR_EMAIL: email,
+    GIT_AUTHOR_DATE: date,
+    GIT_COMMITTER_NAME: name,
+    GIT_COMMITTER_EMAIL: email,
+    GIT_COMMITTER_DATE: date
+  };
+}
+
+/**
+ * Replace branch history with one commit per author-year: each commit’s tree is taken from the
+ * last commit in `getCommitsOldestFirst` order for that year (same author-date rules as the rest
+ * of this script). Merges are flattened into a linear chain.
+ */
+async function squashYearHistoryViaSnapshots(verbose, totalBefore, commits, mergeCount) {
+  const lastHashByYear = new Map();
+  const listByYear = new Map();
+
+  for (const c of commits) {
+    const y = periodKeyFromAuthorDate(c.authorDate, 'year');
+    if (!y) continue;
+    lastHashByYear.set(y, c.hash);
+    if (!listByYear.has(y)) listByYear.set(y, []);
+    listByYear.get(y).push(c);
+  }
+
+  const years = [...lastHashByYear.keys()].sort();
+  if (years.length === 0) {
+    console.log('No commits with parseable author dates; nothing to do.');
+    process.exit(0);
+  }
+
+  if (mergeCount > 0) {
+    console.log(
+      `Note: ${mergeCount} merge commit(s) in the current history will be removed — year strategy produces one linear commit per author-year (tree snapshot).`
+    );
+  }
+
+  console.log(`\nFound ${commits.length} commits in log walk; ${years.length} distinct author-year(s).`);
+  console.log('Planned commits (one tree snapshot per year, oldest → newest):');
+  years.forEach((y) => {
+    const h = lastHashByYear.get(y);
+    const n = (listByYear.get(y) || []).length;
+    console.log(`  ${y}  ← ${h.slice(0, 7)}  (${n} source commit(s) in that year)`);
+  });
+
+  const confirmed = await confirmAction(
+    `Replace the current branch with ${years.length} commit(s) (one per year above)?`
+  );
+  if (!confirmed) {
+    console.log('Operation cancelled by user.');
+    process.exit(0);
+  }
+
+  let branchRef;
+  try {
+    branchRef = runGit(['symbolic-ref', '-q', 'HEAD'], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    }).stdout.trim();
+  } catch {
+    branchRef = '';
+  }
+  if (!branchRef || !branchRef.startsWith('refs/')) {
+    console.error('Error: Detached HEAD — checkout a named branch before rewriting year history.');
+    process.exit(1);
+  }
+
+  let parent = null;
+  let tip = null;
+  for (const y of years) {
+    const srcHash = lastHashByYear.get(y);
+    const { stdout: tree } = runGit(['rev-parse', `${srcHash}^{tree}`], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    const yearCommits = listByYear.get(y) || [];
+    const topic = determineTopic(yearCommits);
+    const msg = createSquashMessage(yearCommits.length, y, topic);
+    const authorEnv = authorEnvFromCommit(srcHash, verbose);
+    const treeSha = tree.trim();
+    const args = parent
+      ? ['commit-tree', treeSha, '-p', parent, '-m', msg]
+      : ['commit-tree', treeSha, '-m', msg];
+    const { stdout: newHash } = runGit(args, {
+      verbose,
+      env: { ...process.env, ...authorEnv },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    parent = newHash.trim();
+    tip = parent;
+  }
+
+  runGit(['update-ref', branchRef, tip], {
+    verbose,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  runGit(['reset', '--hard', tip], {
+    verbose,
+    stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'pipe']
+  });
+
+  const totalAfter = gitRevListCount(verbose);
+  console.log('\n' + '='.repeat(50));
+  console.log('Year snapshot rewrite completed (one commit per author-year).');
+  console.log(`Before: ${totalBefore} commits`);
+  console.log(`After: ${totalAfter} commits`);
+  console.log(`Branch: ${branchRef}`);
+  console.log('Years:');
+  years.forEach((p) => console.log(`- ${p}`));
+  console.log('='.repeat(50));
 }
 
 function gitRebaseStatePath(verbose) {
@@ -951,6 +1078,22 @@ async function squashHistory(strategy, verbose, options = {}) {
   }
 
   let mergeSet = getMergeCommitSet(verbose);
+
+  if (strategy === 'year') {
+    if (allowLegacyFallback) {
+      console.warn(
+        'Note: --allow-legacy-fallback only affects month/day; year always uses snapshot rewrite.'
+      );
+    }
+    if (strictDirectoryRenames) {
+      console.warn(
+        'Note: --strict-directory-renames only affects month/day; year uses snapshot rewrite.'
+      );
+    }
+    await squashYearHistoryViaSnapshots(verbose, totalBefore, commits, mergeSet.size);
+    return;
+  }
+
   let runs = buildRuns(commits, strategy, mergeSet);
   let periodLabels = uniquePeriodLabels(runs);
   const squishable = runs.filter((r) => r.commits.length > 1);
@@ -1073,7 +1216,7 @@ function main() {
 
   if (!strategy) {
     console.error(
-      'Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day> [--verbose] [--strict-directory-renames] [--allow-legacy-fallback]'
+      'Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day> [--verbose] [--strict-directory-renames] [--allow-legacy-fallback]  (year: one commit per author-year via snapshot rewrite)'
     );
     console.error(`Available strategies: ${STRATEGIES.join(', ')}`);
     process.exit(1);
