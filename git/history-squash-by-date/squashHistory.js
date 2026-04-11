@@ -181,28 +181,52 @@ function periodKeyFromAuthorDate(authorDate, strategy) {
   return `${y}-${mo}-${d}`;
 }
 
+function getMergeCommitSet(verbose) {
+  const { stdout } = runGit(['rev-list', '--min-parents=2', 'HEAD'], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  return new Set(stdout.split('\n').filter(Boolean));
+}
+
 /**
  * Maximal consecutive runs with the same period (root → tip order).
+ * Merge commits are never grouped with neighbors: each merge is its own run of length 1
+ * (interactive rebase cannot squash merges; plain `pick` is invalid for them without
+ * `--rebase-merges`, which we use when executing the rebase).
  */
-function buildRuns(commits, strategy) {
+function buildRuns(commits, strategy, mergeSet) {
   if (commits.length === 0) return [];
 
   const runs = [];
-  let current = {
-    period: periodKeyFromAuthorDate(commits[0].authorDate, strategy),
-    commits: [commits[0]]
-  };
+  let current = null;
 
-  for (let k = 1; k < commits.length; k += 1) {
-    const p = periodKeyFromAuthorDate(commits[k].authorDate, strategy);
-    if (p === current.period) {
-      current.commits.push(commits[k]);
-    } else {
+  function flush() {
+    if (current && current.commits.length > 0) {
       runs.push(current);
-      current = { period: p, commits: [commits[k]] };
+    }
+    current = null;
+  }
+
+  for (const c of commits) {
+    if (mergeSet.has(c.hash)) {
+      flush();
+      const p = periodKeyFromAuthorDate(c.authorDate, strategy);
+      runs.push({ period: p, commits: [c] });
+      continue;
+    }
+
+    const p = periodKeyFromAuthorDate(c.authorDate, strategy);
+    if (current === null) {
+      current = { period: p, commits: [c] };
+    } else if (p === current.period) {
+      current.commits.push(c);
+    } else {
+      flush();
+      current = { period: p, commits: [c] };
     }
   }
-  runs.push(current);
+  flush();
   return runs;
 }
 
@@ -273,9 +297,9 @@ function removeQuiet(p) {
 }
 
 /**
- * Returns { ontoArg, hashes } where ontoArg is either ['--root'] or rev of parent of first hash.
+ * Rebase onto args for `git rebase -i --rebase-merges`: either `--root` or `<parent>`.
  */
-function rebaseOntoAndRange(firstHash, verbose) {
+function rebaseOntoArgs(firstHash, verbose) {
   let isRoot = false;
   try {
     runGit(['rev-parse', `${firstHash}^`], { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -284,33 +308,53 @@ function rebaseOntoAndRange(firstHash, verbose) {
   }
 
   if (isRoot) {
-    const { stdout } = runGit(['rev-list', '--reverse', 'HEAD'], {
-      verbose: false,
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    const hashes = stdout.split('\n').filter(Boolean);
-    return { ontoArgs: ['--root'], hashes };
+    return { ontoArgs: ['--root'] };
   }
 
   const { stdout: parent } = runGit(['rev-parse', `${firstHash}^`], {
     verbose: false,
     stdio: ['pipe', 'pipe', 'pipe']
   });
-  const { stdout: rangeOut } = runGit(['rev-list', '--reverse', `${parent}..HEAD`], {
+  const { stdout: cnt } = runGit(['rev-list', '--count', `${parent}..HEAD`], {
     verbose: false,
     stdio: ['pipe', 'pipe', 'pipe']
   });
-  const hashes = rangeOut.split('\n').filter(Boolean);
-  return { ontoArgs: [parent], hashes };
+  const n = parseInt(cnt, 10);
+  if (!Number.isFinite(n) || n === 0) {
+    throw new Error('No commits to rebase (empty revision range).');
+  }
+  return { ontoArgs: [parent] };
 }
 
-function buildTodoLines(hashes, runSet, firstInRun) {
-  return hashes.map((h) => {
-    if (runSet.has(h)) {
-      return h === firstInRun ? `pick ${h}` : `squash ${h}`;
-    }
-    return `pick ${h}`;
-  });
+/**
+ * Writes a GIT_SEQUENCE_EDITOR script that edits Git’s generated todo (with merges)
+ * by turning selected `pick` lines into `squash`. Abbreviated hashes in the todo are
+ * matched against full hashes from the run.
+ */
+function writeSequenceTransformScript(tmpDir, squashFullHashes) {
+  const cfg = { squash: squashFullHashes.map((h) => h.toLowerCase()) };
+  const body = `'use strict';
+const fs = require('fs');
+const cfg = ${JSON.stringify(cfg)};
+const dest = process.argv[process.argv.length - 1];
+const text = fs.readFileSync(dest, 'utf8');
+function abbrevMatches(abbrev, full) {
+  const a = abbrev.toLowerCase();
+  const f = full.toLowerCase();
+  return f === a || f.startsWith(a) || (a.length >= 4 && f.startsWith(a));
+}
+function isSquashPick(abbrev) {
+  return cfg.squash.some((full) => abbrevMatches(abbrev, full));
+}
+const lines = text.split(/\\r?\\n/);
+const out = lines.map((line) => {
+  const m = /^(pick)\\s+([0-9a-f]+)\\b(.*)$/i.exec(line);
+  if (!m || !isSquashPick(m[2])) return line;
+  return 'squash ' + m[2] + m[3];
+});
+fs.writeFileSync(dest, out.join('\\n'));
+`;
+  return writeTempFile(tmpDir, 'seq-transform', body, '.js');
 }
 
 function squashOneRun(run, verbose, tmpDir) {
@@ -318,27 +362,20 @@ function squashOneRun(run, verbose, tmpDir) {
   if (commits.length <= 1) return;
 
   const firstHash = commits[0].hash;
-  const runSet = new Set(commits.map((c) => c.hash));
   const topic = determineTopic(commits);
   const message = createSquashMessage(commits.length, run.period, topic);
 
-  const { ontoArgs, hashes } = rebaseOntoAndRange(firstHash, verbose);
-  if (hashes.length === 0) {
-    throw new Error('No commits in rebase range.');
-  }
+  const { ontoArgs } = rebaseOntoArgs(firstHash, verbose);
+  const squashTargets = commits.slice(1).map((c) => c.hash);
 
-  const todoLines = buildTodoLines(hashes, runSet, firstHash);
-  const todoBody = `${todoLines.join('\n')}\n`;
-  const todoPath = writeTempFile(tmpDir, 'git-rebase-todo', todoBody);
   const msgPath = writeTempFile(tmpDir, 'squash-msg', `${message}\n`);
-
-  const seqScript = writeCopyEditorScript(tmpDir, todoPath);
+  const seqScript = writeSequenceTransformScript(tmpDir, squashTargets);
   const msgScript = writeCopyEditorScript(tmpDir, msgPath);
   const sequenceEditorCmd = editorCommand(seqScript);
   const messageEditorCmd = editorCommand(msgScript);
 
   try {
-    runGit(['rebase', '-i', ...ontoArgs], {
+    runGit(['rebase', '-i', '--rebase-merges', ...ontoArgs], {
       verbose,
       stdio: 'inherit',
       env: {
@@ -347,7 +384,6 @@ function squashOneRun(run, verbose, tmpDir) {
       }
     });
   } finally {
-    removeQuiet(todoPath);
     removeQuiet(msgPath);
     removeQuiet(seqScript);
     removeQuiet(msgScript);
@@ -400,13 +436,20 @@ async function squashHistory(strategy, verbose) {
     process.exit(0);
   }
 
-  let runs = buildRuns(commits, strategy);
+  let mergeSet = getMergeCommitSet(verbose);
+  let runs = buildRuns(commits, strategy, mergeSet);
   let periodLabels = uniquePeriodLabels(runs);
   const squishable = runs.filter((r) => r.commits.length > 1);
 
   if (squishable.length === 0) {
     console.log('No multi-commit periods to squash (each period has at most one commit).');
     process.exit(0);
+  }
+
+  if (mergeSet.size > 0) {
+    console.log(
+      `Note: ${mergeSet.size} merge commit(s) in history — rebases use --rebase-merges; merges are not squashed.`
+    );
   }
 
   console.log(`\nFound ${commits.length} commits to process`);
@@ -429,7 +472,8 @@ async function squashHistory(strategy, verbose) {
   try {
     while (true) {
       commits = getCommitsOldestFirst(verbose);
-      runs = buildRuns(commits, strategy);
+      mergeSet = getMergeCommitSet(verbose);
+      runs = buildRuns(commits, strategy, mergeSet);
       const next = runs.find((r) => r.commits.length > 1);
       if (!next) break;
 
@@ -452,7 +496,9 @@ async function squashHistory(strategy, verbose) {
     }
 
     const totalAfter = gitRevListCount(verbose);
-    periodLabels = uniquePeriodLabels(buildRuns(getCommitsOldestFirst(verbose), strategy));
+    periodLabels = uniquePeriodLabels(
+      buildRuns(getCommitsOldestFirst(verbose), strategy, getMergeCommitSet(verbose))
+    );
 
     console.log('\n' + '='.repeat(50));
     console.log('Commit merging completed.');
