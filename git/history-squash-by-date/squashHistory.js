@@ -332,10 +332,25 @@ function rebaseOntoArgs(firstHash, verbose) {
  * Each `pick` hash is resolved with `git rev-parse` so shared abbrev prefixes (e.g. root vs
  * child) never turn the wrong line into `squash` — which would hit “cannot fixup root commit”.
  */
-function writeSequenceTransformScript(tmpDir, squashFullHashes, firstFullHash) {
+function getRootHashesSet(verbose) {
+  const { stdout } = runGit(['rev-list', '--max-parents=0', 'HEAD'], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  return new Set(
+    stdout
+      .split('\n')
+      .filter(Boolean)
+      .map((h) => h.trim().toLowerCase())
+  );
+}
+
+function writeSequenceTransformScript(tmpDir, squashFullHashes, firstFullHash, rootHashesLc) {
+  const roots = [...rootHashesLc].map((h) => h.toLowerCase());
   const cfg = {
     squash: squashFullHashes.map((h) => h.toLowerCase()),
-    first: firstFullHash.toLowerCase()
+    first: firstFullHash.toLowerCase(),
+    roots
   };
   const body = `'use strict';
 const fs = require('fs');
@@ -344,6 +359,7 @@ const cfg = ${JSON.stringify(cfg)};
 const dest = process.argv[process.argv.length - 1];
 const squashSet = new Set(cfg.squash);
 const firstLc = cfg.first;
+const rootSet = new Set(cfg.roots);
 
 function resolveCommit(token) {
   const r = spawnSync('git', ['rev-parse', '--verify', token + '^{commit}'], {
@@ -360,7 +376,7 @@ const out = lines.map((line) => {
   const m = /^(pick)\\s+([0-9a-f]+)\\b(.*)$/i.exec(line);
   if (!m) return line;
   const full = resolveCommit(m[2]);
-  if (!full || full === firstLc || !squashSet.has(full)) return line;
+  if (!full || full === firstLc || rootSet.has(full) || !squashSet.has(full)) return line;
   return 'squash ' + m[2] + m[3];
 });
 fs.writeFileSync(dest, out.join('\\n'));
@@ -382,15 +398,41 @@ function isAncestorOf(ancestor, descendant, verbose) {
 }
 
 /**
- * The commit that must stay `pick` is the graph-oldest in the run (ancestor of every other
- * commit here). `git log --reverse` order follows topology but can still disagree with
- * `%ai` grouping after partial rebases; using `commits[0]` alone can mark the real root as
- * `squash` and trigger “cannot fixup root commit”.
+ * Chooses the `pick` commit and the rest as `squash` targets. Repo root(s) must never be
+ * squashed. Sibling commits (neither is ancestor of the other) are resolved via rev-list order.
  */
 function resolvePickAndSquashHashes(run, verbose) {
   const { commits } = run;
   if (commits.length <= 1) {
     return { firstHash: commits[0] ? commits[0].hash : null, squashTargets: [] };
+  }
+
+  const roots = getRootHashesSet(verbose);
+  const rootsInRun = commits.filter((c) => roots.has(c.hash.toLowerCase()));
+  if (rootsInRun.length > 0) {
+    let pick = rootsInRun[0];
+    if (rootsInRun.length > 1) {
+      const { stdout: order } = runGit(['rev-list', '--reverse', 'HEAD'], {
+        verbose: false,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      const rset = new Set(rootsInRun.map((r) => r.hash.toLowerCase()));
+      for (const line of order.split('\n')) {
+        const h = line.trim().toLowerCase();
+        if (rset.has(h)) {
+          pick = rootsInRun.find((r) => r.hash.toLowerCase() === h) || pick;
+          break;
+        }
+      }
+    }
+    const firstHash = pick.hash;
+    const squashTargets = commits
+      .filter((d) => d.hash.toLowerCase() !== firstHash.toLowerCase())
+      .map((d) => d.hash);
+    if (verbose) {
+      console.error(`[squash] pick base ${firstHash.slice(0, 7)} (repository root in this run)`);
+    }
+    return { firstHash, squashTargets };
   }
 
   for (const c of commits) {
@@ -404,19 +446,43 @@ function resolvePickAndSquashHashes(run, verbose) {
         .map((d) => d.hash);
       if (verbose && commits[0].hash.toLowerCase() !== c.hash.toLowerCase()) {
         console.error(
-          `[squash] pick base ${c.hash.slice(0, 7)} (graph-oldest), not log-first ${commits[0].hash.slice(0, 7)}`
+          `[squash] pick base ${c.hash.slice(0, 7)} (ancestor of all in run), not log-first ${commits[0].hash.slice(0, 7)}`
         );
       }
       return { firstHash: c.hash, squashTargets };
     }
   }
 
+  const { stdout: order } = runGit(['rev-list', '--reverse', 'HEAD'], {
+    verbose: false,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  const inRun = new Set(commits.map((c) => c.hash.toLowerCase()));
+  let firstFromTopo = null;
+  for (const line of order.split('\n')) {
+    const h = line.trim().toLowerCase();
+    if (inRun.has(h)) {
+      firstFromTopo = commits.find((c) => c.hash.toLowerCase() === h);
+      break;
+    }
+  }
+  if (firstFromTopo) {
+    const firstHash = firstFromTopo.hash;
+    const squashTargets = commits
+      .filter((d) => d.hash.toLowerCase() !== firstHash.toLowerCase())
+      .map((d) => d.hash);
+    if (verbose) {
+      console.error(
+        `[squash] pick base ${firstHash.slice(0, 7)} (first in rev-list among run; siblings / no single ancestor)`
+      );
+    }
+    return { firstHash, squashTargets };
+  }
+
   const firstHash = commits[0].hash;
   const squashTargets = commits.slice(1).map((c) => c.hash);
   if (verbose) {
-    console.error(
-      '[squash] warning: no commit in run is ancestor of all others; using log order for pick'
-    );
+    console.error('[squash] warning: fallback to log order for pick');
   }
   return { firstHash, squashTargets };
 }
@@ -433,8 +499,9 @@ function squashOneRun(run, verbose, tmpDir) {
 
   const { ontoArgs } = rebaseOntoArgs(firstHash, verbose);
 
+  const rootHashes = getRootHashesSet(verbose);
   const msgPath = writeTempFile(tmpDir, 'squash-msg', `${message}\n`);
-  const seqScript = writeSequenceTransformScript(tmpDir, squashTargets, firstHash);
+  const seqScript = writeSequenceTransformScript(tmpDir, squashTargets, firstHash, [...rootHashes]);
   const msgScript = writeCopyEditorScript(tmpDir, msgPath);
   const sequenceEditorCmd = editorCommand(seqScript);
   const messageEditorCmd = editorCommand(msgScript);
