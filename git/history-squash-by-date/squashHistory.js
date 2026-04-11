@@ -72,16 +72,36 @@ function logGit(verbose, args) {
   }
 }
 
+/**
+ * Git must not share the user's TTY on stdin: on Windows, failed unlinks during checkout/rebase
+ * trigger "Unlink of file ... failed. Should I try again? (y/n)" and would block the script.
+ */
+function gitChildStdio(stdio, verbose, input) {
+  if (stdio && stdio !== 'inherit') {
+    return stdio;
+  }
+  const usePipeIn = input != null && input !== '';
+  const inFd = usePipeIn ? 'pipe' : 'ignore';
+  if (stdio === 'inherit' || (stdio === undefined && verbose)) {
+    return [inFd, 'inherit', 'inherit'];
+  }
+  return [inFd, 'pipe', 'pipe'];
+}
+
 function runGit(args, options = {}) {
   const { verbose = false, env = {}, input = null, stdio } = options;
   logGit(verbose, args);
 
-  const mergedEnv = { ...process.env, ...env };
+  const mergedEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    ...env
+  };
   const result = spawnSync('git', args, {
     encoding: 'utf8',
     env: mergedEnv,
     input,
-    stdio: stdio || (verbose ? 'inherit' : ['pipe', 'pipe', 'inherit']),
+    stdio: gitChildStdio(stdio, verbose, input),
     maxBuffer: 50 * 1024 * 1024
   });
 
