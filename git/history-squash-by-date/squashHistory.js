@@ -292,6 +292,137 @@ function createSquashMessage(count, period, topic) {
   return `squash: ${count} commits for ${period}`;
 }
 
+function gitRebaseStatePath(verbose) {
+  for (const sub of ['rebase-merge', 'rebase-apply']) {
+    try {
+      const { stdout } = runGit(['rev-parse', '--git-path', sub], {
+        verbose: false,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      const p = stdout.trim();
+      if (p && fs.existsSync(p)) return p;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+function hasUnmergedPaths(verbose) {
+  try {
+    const { stdout } = runGit(['diff', '--name-only', '--diff-filter=U'], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return Boolean(stdout && stdout.trim());
+  } catch {
+    return false;
+  }
+}
+
+/** True when index matches HEAD (typical state when a squash step would create an empty commit). */
+function indexMatchesHead(verbose) {
+  try {
+    runGit(['diff-index', '--quiet', '--cached', 'HEAD', '--'], {
+      verbose: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function looksLikeEmptySquashFailure(err) {
+  const text = `${err && err.message ? err.message : ''}\n${err && err.stderr ? err.stderr : ''}`.toLowerCase();
+  return (
+    text.includes('would make it empty') ||
+    text.includes('would become empty') ||
+    text.includes('nothing to commit, working tree clean')
+  );
+}
+
+function looksLikeCouldNotApply(err) {
+  const text = `${err && err.message ? err.message : ''}\n${err && err.stderr ? err.stderr : ''}`.toLowerCase();
+  return text.includes('could not apply');
+}
+
+/**
+ * Interactive squash can fold commits whose combined patch is empty; Git then refuses to amend
+ * unless --allow-empty. Record that commit and drive `git rebase --continue` to completion.
+ */
+function tryFinishRebaseAfterEmptySquash(verbose, rebaseErr, continueEnv) {
+  if (!gitRebaseStatePath(verbose)) return false;
+  if (hasUnmergedPaths(verbose)) return false;
+
+  const likelyEmpty =
+    looksLikeEmptySquashFailure(rebaseErr) ||
+    (indexMatchesHead(verbose) && looksLikeCouldNotApply(rebaseErr));
+  if (!likelyEmpty) return false;
+
+  if (verbose) {
+    console.error(
+      '[squash] Squash step would produce an empty commit — recording with --allow-empty and continuing rebase.'
+    );
+  }
+
+  try {
+    runGit(['commit', '--amend', '--allow-empty', '--no-edit'], {
+      verbose,
+      stdio: 'inherit',
+      env: continueEnv
+    });
+  } catch {
+    return false;
+  }
+
+  const maxSteps = 2000;
+  for (let i = 0; i < maxSteps; i += 1) {
+    if (!gitRebaseStatePath(verbose)) return true;
+
+    const r = spawnSync('git', ['rebase', '--continue'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: '0',
+        ...continueEnv
+      },
+      stdio: verbose ? 'inherit' : ['pipe', 'pipe', 'pipe'],
+      maxBuffer: 50 * 1024 * 1024
+    });
+
+    if (r.status === 0) {
+      if (!gitRebaseStatePath(verbose)) return true;
+      continue;
+    }
+
+    const faux = {
+      message: `${r.stderr || ''}\n${r.stdout || ''}`,
+      stderr: r.stderr || ''
+    };
+    if (gitRebaseStatePath(verbose) && !hasUnmergedPaths(verbose) && looksLikeEmptySquashFailure(faux)) {
+      try {
+        runGit(['commit', '--amend', '--allow-empty', '--no-edit'], {
+          verbose,
+          stdio: 'inherit',
+          env: continueEnv
+        });
+      } catch {
+        if (verbose && r.stderr) console.error(r.stderr);
+        return false;
+      }
+      continue;
+    }
+
+    if (verbose && (r.stderr || r.stdout)) {
+      console.error((r.stderr || '').trim() || (r.stdout || '').trim());
+    }
+    return false;
+  }
+
+  return false;
+}
+
 function writeTempFile(dir, prefix, content, ext = '.tmp') {
   const name = `${prefix}-${process.pid}-${Math.random().toString(36).slice(2)}${ext}`;
   const full = path.join(dir, name);
@@ -676,6 +807,18 @@ function squashOneRun(run, verbose, tmpDir, rebaseOptions = {}) {
   const msgScript = writeCopyEditorScript(tmpDir, msgPath);
   const sequenceEditorCmd = editorCommand(seqScript);
   const messageEditorCmd = editorCommand(msgScript);
+  const noopSeqScript = writeTempFile(
+    tmpDir,
+    'noop-seq',
+    `'use strict';
+const fs = require('fs');
+const dst = process.argv[process.argv.length - 1];
+const t = fs.readFileSync(dst, 'utf8');
+fs.writeFileSync(dst, t);
+`,
+    '.js'
+  );
+  const noopSequenceEditorCmd = editorCommand(noopSeqScript);
 
   // Squash + --rebase-merges often replays merges where one side renamed dirs and the other added
   // files under old paths; ORT then emits CONFLICT (file location). `merge.directoryRenames=false`
@@ -693,28 +836,53 @@ function squashOneRun(run, verbose, tmpDir, rebaseOptions = {}) {
         ...ontoArgs
       ];
 
+  const rebaseEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_SEQUENCE_EDITOR: sequenceEditorCmd,
+    GIT_EDITOR: messageEditorCmd
+  };
+  const continueEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_SEQUENCE_EDITOR: noopSequenceEditorCmd,
+    GIT_EDITOR: messageEditorCmd
+  };
+
   try {
-    runGit(rebaseCmd, {
-      verbose,
-      stdio: 'inherit',
-      env: {
-        GIT_SEQUENCE_EDITOR: sequenceEditorCmd,
-        GIT_EDITOR: messageEditorCmd
-      }
+    const rb = spawnSync('git', rebaseCmd, {
+      encoding: 'utf8',
+      env: rebaseEnv,
+      stdio: ['ignore', verbose ? 'inherit' : 'pipe', 'pipe'],
+      maxBuffer: 50 * 1024 * 1024
     });
-  } catch (e) {
-    if (fs.existsSync(sentinelNoContiguous)) {
-      removeQuiet(sentinelNoContiguous);
-      try {
-        runGit(['rebase', '--abort'], { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] });
-      } catch {
-        /* ignore */
+
+    if (rb.status !== 0) {
+      const msg =
+        (rb.stderr && rb.stderr.trim()) ||
+        (rb.stdout && rb.stdout.trim()) ||
+        `git ${rebaseCmd[0]} failed with exit ${rb.status}`;
+      const rebaseErr = new Error(msg);
+      rebaseErr.stderr = rb.stderr || '';
+      if (verbose && rb.stderr) console.error(rb.stderr.trim());
+
+      if (fs.existsSync(sentinelNoContiguous)) {
+        removeQuiet(sentinelNoContiguous);
+        try {
+          runGit(['rebase', '--abort'], { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] });
+        } catch {
+          /* ignore */
+        }
+        return 'topo-skip';
       }
-      return 'topo-skip';
+
+      if (!tryFinishRebaseAfterEmptySquash(verbose, rebaseErr, continueEnv)) {
+        throw rebaseErr;
+      }
     }
-    throw e;
   } finally {
     removeQuiet(sentinelNoContiguous);
+    removeQuiet(noopSeqScript);
     removeQuiet(msgPath);
     removeQuiet(seqScript);
     removeQuiet(msgScript);
@@ -903,7 +1071,10 @@ function main() {
     process.exit(1);
   }
 
-  squashHistory(strategy, verbose, { strictDirectoryRenames, allowLegacyFallback }).catch((err) => {
+  squashHistory(strategy, verbose, {
+    strictDirectoryRenames,
+    allowLegacyFallback
+  }).catch((err) => {
     console.error('Unexpected error:', err);
     process.exit(1);
   });
