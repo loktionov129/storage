@@ -49,6 +49,8 @@ function parseArgs(argv) {
   const args = argv.slice(2);
   let strategy = null;
   let verbose = false;
+  /** If true, use Git defaults for directory-rename detection during rebase (may stop on CONFLICT file location). */
+  let strictDirectoryRenames = false;
 
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === '--strategy' && i + 1 < args.length) {
@@ -56,10 +58,12 @@ function parseArgs(argv) {
       i += 1;
     } else if (args[i] === '--verbose') {
       verbose = true;
+    } else if (args[i] === '--strict-directory-renames') {
+      strictDirectoryRenames = true;
     }
   }
 
-  return { strategy, verbose };
+  return { strategy, verbose, strictDirectoryRenames };
 }
 
 function logGit(verbose, args) {
@@ -570,9 +574,10 @@ function resolvePickAndSquashHashes(run, verbose) {
 }
 
 /**
- * @returns {boolean} true if an interactive rebase was started and finished; false if this run was skipped
+ * @returns {boolean} true if an interactive rebase was finished; false if this run was skipped
  */
-function squashOneRun(run, verbose, tmpDir) {
+function squashOneRun(run, verbose, tmpDir, rebaseOptions = {}) {
+  const strictDirectoryRenames = rebaseOptions.strictDirectoryRenames === true;
   const { commits } = run;
   if (commits.length <= 1) return false;
 
@@ -603,8 +608,24 @@ function squashOneRun(run, verbose, tmpDir) {
   const sequenceEditorCmd = editorCommand(seqScript);
   const messageEditorCmd = editorCommand(msgScript);
 
+  // Squash + --rebase-merges often replays merges where one side renamed dirs and the other added
+  // files under old paths; ORT then emits CONFLICT (file location). `merge.directoryRenames=false`
+  // avoids that, but is only honored by the `recursive` merge strategy (not ORT).
+  const rebaseCmd = strictDirectoryRenames
+    ? ['rebase', '-i', '--rebase-merges', ...ontoArgs]
+    : [
+        '-c',
+        'merge.directoryRenames=false',
+        'rebase',
+        '-i',
+        '--rebase-merges',
+        '-s',
+        'recursive',
+        ...ontoArgs
+      ];
+
   try {
-    runGit(['rebase', '-i', '--rebase-merges', ...ontoArgs], {
+    runGit(rebaseCmd, {
       verbose,
       stdio: 'inherit',
       env: {
@@ -647,7 +668,8 @@ function uniquePeriodLabels(runs) {
   return out.sort();
 }
 
-async function squashHistory(strategy, verbose) {
+async function squashHistory(strategy, verbose, options = {}) {
+  const strictDirectoryRenames = options.strictDirectoryRenames === true;
   if (!STRATEGIES.includes(strategy)) {
     console.error(
       `Error: Unknown strategy '${strategy}'. Valid values: ${STRATEGIES.join(', ')}.`
@@ -721,9 +743,10 @@ async function squashHistory(strategy, verbose) {
       const commitsBefore = gitRevListCount(verbose);
       let didRebase = false;
       try {
-        didRebase = squashOneRun(next, verbose, tmpDir);
+        didRebase = squashOneRun(next, verbose, tmpDir, { strictDirectoryRenames });
       } catch (e) {
         console.error(`Error during squash for period ${next.period}:`, e.message || e);
+        console.error('Hint: To undo this failed rebase: git rebase --abort');
         try {
           runGit(['rebase', '--abort'], { verbose: false, stdio: ['pipe', 'pipe', 'pipe'] });
         } catch {
@@ -779,17 +802,17 @@ async function squashHistory(strategy, verbose) {
 }
 
 function main() {
-  const { strategy, verbose } = parseArgs(process.argv);
+  const { strategy, verbose, strictDirectoryRenames } = parseArgs(process.argv);
 
   if (!strategy) {
     console.error(
-      'Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day> [--verbose]'
+      'Error: Strategy parameter is required. Usage: node squashHistory.js --strategy <year|month|day> [--verbose] [--strict-directory-renames]'
     );
     console.error(`Available strategies: ${STRATEGIES.join(', ')}`);
     process.exit(1);
   }
 
-  squashHistory(strategy, verbose).catch((err) => {
+  squashHistory(strategy, verbose, { strictDirectoryRenames }).catch((err) => {
     console.error('Unexpected error:', err);
     process.exit(1);
   });
