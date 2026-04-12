@@ -1,3 +1,8 @@
+https://github.com/Zproger/bspwm-dotfiles
+- A minimalistic Arch Linux build that is designed to make your development easier and faster
+---
+
+
 # Update the system clock
 ```
 timedatectl set-ntp true
