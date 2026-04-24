@@ -1,29 +1,46 @@
 {
-    "terminal.integrated.automationShell.windows": "C:\\soft\\Git\\bin\\bash.exe",
-    "terminal.external.windowsExec": "C:\\soft\\Git\\bin\\bash.exe",
-    "terminal.integrated.shell.windows": "C:\\soft\\Git\\bin\\bash.exe",
-    "extensions.ignoreRecommendations": false,
+    "editor.codeLens": false,
+    "editor.detectIndentation": true,
+    "editor.fontSize": 24,
+    "editor.formatOnSave": false,
+    "editor.insertSpaces": true,
+    "editor.linkedEditing": true,
+    "editor.minimap.enabled": false,
+    "editor.renderControlCharacters": false,
+    "editor.scrollBeyondLastLine": true,
+    "editor.suggestSelection": "first",
+    "editor.tabSize": 2,
+    "editor.unicodeHighlight.allowedLocales": {
+        "ru": true
+    },
+    "editor.unicodeHighlight.ambiguousCharacters": false,
+    "editor.wordWrap": "bounded",
+    "editor.wrappingIndent": "same",
+    "editor.wordWrapColumn": 100,
+
+    "explorer.confirmDragAndDrop": false,
     "explorer.confirmDelete": false,
     "files.autoSave": "afterDelay",
-    "[javascript]": {
-        "editor.formatOnSave": true
-      },
-      "[json]": {
-        "editor.formatOnSave": true
-      },
-      "[todo]": {
-        "editor.tabSize": 4
-      },
-      "[typescript]": {
-        "editor.formatOnSave": true
-      },
-      "editor.detectIndentation": false,
-      "editor.formatOnSave": false,
-      "editor.insertSpaces": true,
-      "editor.matchBrackets": "never",
-      "editor.tabSize": 4,
-      "files.exclude": {
-        "**/node_modules": true,
-        "node_modules": true
-      },
+    "git.enableSmartCommit": true,
+    "html.autoClosingTags": true,
+    "js/ts.autoClosingTags.enabled": true,
+    "security.workspace.trust.untrustedFiles": "open",
+    "terminal.external.windowsExec": "G:\\git\\bin\\bash.exe",
+    "terminal.integrated.defaultProfile.windows": "Git Bash",
+    "terminal.integrated.profiles.windows": {
+        "Git Bash": {
+            "path": "G:\\git\\bin\\bash.exe",
+            "icon": "terminal-bash"
+        }
+    },
+    "terminal.integrated.shell.windows": "G:\\git\\bin\\bash.exe",
+    "terminal.integrated.initialHint": false,
+    "window.openFilesInNewWindow": "off",
+
+    // Extensions:
+    // continue.continue
+    "continue.enableTabAutocomplete": false,
+    // ms-azuretools.vscode-containers
+    "containers.containerClient": "com.microsoft.visualstudio.containers.docker",
+    "containers.orchestratorClient": "com.microsoft.visualstudio.orchestrators.dockercompose",
 }
