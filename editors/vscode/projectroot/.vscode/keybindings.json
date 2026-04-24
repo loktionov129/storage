@@ -47,9 +47,15 @@
     "command": "-workbench.action.gotoLine"
   },
 
-  // Переход к строке
+  // Go to implementation
   {
     "key": "alt+g",
+    "command": "editor.action.revealDefinition"
+  },
+
+  // Переход к строке
+  {
+    "key": "alt+q",
     "command": "workbench.action.gotoLine"
   },
   
