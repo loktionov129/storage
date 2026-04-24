@@ -1,0 +1,77 @@
+// Place your key bindings in this file to override the defaults
+[
+  // Переключение видимости встроенного терминала (показать/скрыть)
+  {
+    "key": "ctrl+`",
+    "command": "workbench.action.terminal.toggleTerminal"
+  },
+
+  // Закрыть текущую активную вкладку (редактор)
+  {
+    "key": "ctrl+w",
+    "command": "workbench.action.closeActiveEditor"
+  },
+
+  // Дублировать текущую строку или выделение вниз
+  {
+    "key": "ctrl+d",
+    "command": "editor.action.copyLinesDownAction",
+    "when": "editorTextFocus && !editorReadonly"
+  },
+  {
+    "key": "ctrl+d",
+    "command": "-editor.action.addSelectionToNextFindMatch"
+  },
+
+  // Блочный комментарий (Alt + /)
+  {
+    "key": "alt+/",
+    "command": "editor.action.blockComment",
+    "when": "editorTextFocus && !editorReadonly"
+  },
+
+  // Строчный комментарий (Ctrl + /)
+  {
+    "key": "ctrl+/",
+    "command": "editor.action.commentLine",
+    "when": "editorTextFocus && !editorReadonly"
+  },
+
+  // Выделить текущий файл в дереве проводника (Select In Project View)
+  {
+    "key": "ctrl+g",
+    "command": "workbench.files.action.showActiveFileInExplorer"
+  },
+  {
+    "key": "ctrl+g",
+    "command": "-workbench.action.gotoLine"
+  },
+
+  // Переход к строке
+  {
+    "key": "alt+g",
+    "command": "workbench.action.gotoLine"
+  },
+  
+  // Переместить строку вверх (Ctrl + T)
+  {
+    "key": "ctrl+t",
+    "command": "editor.action.moveLinesUpAction",
+    "when": "editorTextFocus && !editorReadonly"
+  },
+  {
+    "key": "ctrl+t",
+    "command": "-workbench.action.showAllSymbols"
+  },
+
+  // Переместить строку вниз (Ctrl + B) — добавлено для пары к Ctrl+T
+  {
+    "key": "ctrl+b",
+    "command": "editor.action.moveLinesDownAction",
+    "when": "editorTextFocus && !editorReadonly"
+  },
+  {
+    "key": "ctrl+b",
+    "command": "-workbench.action.toggleSidebarVisibility"
+  }
+]
