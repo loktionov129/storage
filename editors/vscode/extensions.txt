@@ -3,3 +3,11 @@ ToDo+
 Angular Language Service
 esbenp.prettier-vscode
 StyleLint
+
+
+
+
+ms-azuretools.vscode-containers
+ms-dotnettools.vscode-dotnet-runtime
+ms-dotnettools.csharp
+ms-dotnettools.csdevkit
