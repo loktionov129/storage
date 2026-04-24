@@ -79,5 +79,17 @@
   {
     "key": "ctrl+b",
     "command": "-workbench.action.toggleSidebarVisibility"
+  },
+
+  // Вызов быстрых исправлений и контекстных действий (аналог Alt+Enter в WebStorm)
+  {
+    "key": "alt+enter",
+    "command": "editor.action.quickFix",
+    "when": "editorTextFocus && !editorReadonly"
+  },
+  // Отключаем стандартную привязку Alt+Enter (в VS Code это обычно развертывание во весь экран или переход по ссылке)
+  {
+    "key": "alt+enter",
+    "command": "-editor.action.openDeclaration" 
   }
 ]
