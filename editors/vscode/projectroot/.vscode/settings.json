@@ -1,6 +1,6 @@
 {
     "editor.codeLens": false,
-    "editor.detectIndentation": true,
+    "editor.detectIndentation": false,
     "editor.fontSize": 24,
     "editor.formatOnSave": false,
     "editor.insertSpaces": true,
@@ -10,6 +10,9 @@
     "editor.scrollBeyondLastLine": true,
     "editor.suggestSelection": "first",
     "editor.tabSize": 2,
+    "[csharp]": {
+        "editor.tabSize": 4
+    },
     "editor.unicodeHighlight.allowedLocales": {
         "ru": true
     },
