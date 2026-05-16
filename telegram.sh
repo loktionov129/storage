@@ -1,7 +1,5 @@
 # Proxy
 
-## onexray
-pomyanem
 
 ## MTProto
 ```sh
@@ -14,7 +12,7 @@ pomyanem
               -e TG_WS_PROXY_SECRET="XxX" \
               -e TG_WS_PROXY_DC_IPS="1:149.154.167.220 2:149.154.167.220 3:149.154.167.220 4:149.154.167.220 5:149.154.167.220" \
               tg-ws-proxy:latest
-```sh
+```
 
 
 ## sock5
@@ -25,3 +23,6 @@ pomyanem
 ❯ git checkout bd4746004efa8553c67de2af59d9dee288221e6e
 ❯ uv run --no-project --with cryptography python proxy/tg_ws_proxy.py --host 0.0.0.0 --port 1443
 ```
+
+## onexray
+pomyanem
