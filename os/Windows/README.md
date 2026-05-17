@@ -6,11 +6,19 @@
 
 ## Post-INstall
 
-`nano /c/soft/Git/etc/profile.d/git-prompt.sh`
+` notepad ~/.bashrc`
 
-```sh
-#       PS1="$PS1"'\[\033[32m\]'       # change to green
-#       PS1="$PS1"'\u@\h '             # user@host<space>
-#       PS1="$PS1"'\[\033[35m\]'       # change to purple
-#       PS1="$PS1"'$MSYSTEM '          # show MSYSTEM
+```bashsh
+if [ -f /etc/profile.d/git-prompt.sh ]; then
+  . /etc/profile.d/git-prompt.sh
+fi
+
+export GIT_PS1_SHOWDIRTYSTATE=1
+export GIT_PS1_SHOWUNTRACKEDFILES=1
+export GIT_PS1_SHOWSTASHSTATE=1
+export GIT_PS1_SHOWUPSTREAM="auto"
+
+# Зеленый ник, желтая короткая папка, бирюзовый git
+export PS1="\[\033[32m\]\u \[\033[33m\]\W\[\033[36m\]\$(__git_ps1 \" (%s)\")\[\033[0m\] $ "
+
 ```
