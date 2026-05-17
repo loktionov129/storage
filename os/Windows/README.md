@@ -1,5 +1,11 @@
 # DO NOT USE WINDOWS FOR PROGRAMMING !!!
 
+## Pre-INstall
+- autounattend.xml
+* https://github.com/memstechtips/UnattendedWinstall
+
+## Post-INstall
+
 `nano /c/soft/Git/etc/profile.d/git-prompt.sh`
 
 ```sh
