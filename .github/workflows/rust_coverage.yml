@@ -1,0 +1,69 @@
+name: Coverage Badge
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup update stable && rustup component add llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate Coverage Badge
+        run: |
+          # 1. Получаем отчет
+          REPORT=$(cd __lang/Rust && cargo llvm-cov --summary-only)
+          
+          # 2. Выдираем процент из строки TOTAL
+          PERCENTAGE=$(echo "$REPORT" | grep "TOTAL" | grep -oE "[0-9]+\.[0-9]+%" | head -n 1 | sed 's/\..*//')
+          
+          echo "DEBUG: Extracted percentage: '$PERCENTAGE'"
+
+          # 3. Цвет
+          INT_VAL=$(printf "%.0f" "$PERCENTAGE" 2>/dev/null || echo 0)
+          if [ "$INT_VAL" -lt 50 ]; then COLOR="#e05d44"; elif [ "$INT_VAL" -lt 80 ]; then COLOR="#dfb317"; else COLOR="#44cc11"; fi
+
+          # 4. SVG 
+          cat <<EOF > coverage.svg
+          <?xml version="1.0" encoding="UTF-8"?>
+          <svg xmlns="http://www.w3.org/2000/svg" width="99" height="20">
+              <linearGradient id="b" x2="0" y2="100%">
+                  <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+                  <stop offset="1" stop-opacity=".1"/>
+              </linearGradient>
+              <mask id="a">
+                  <rect width="99" height="20" rx="3" fill="#fff"/>
+              </mask>
+              <g mask="url(#a)">
+                  <path fill="#555" d="M0 0h63v20H0z"/>
+                  <path fill="$COLOR" d="M63 0h36v20H63z"/>
+                  <path fill="url(#b)" d="M0 0h99v20H0z"/>
+              </g>
+              <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+                  <text x="31.5" y="15" fill="#010101" fill-opacity=".3">coverage</text>
+                  <text x="31.5" y="14">coverage</text>
+                  <text x="80" y="15" fill="#010101" fill-opacity=".3">${PERCENTAGE}%</text>
+                  <text x="80" y="14">${PERCENTAGE}%</text>
+              </g>
+          </svg>
+
+          EOF
+
+      - name: Deploy to badges branch
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: .
+          branch: badges
+          target-folder: .
+          include: coverage.svg
