@@ -1,0 +1,13 @@
+FROM alpine:3.19
+RUN apk add --no-cache \
+    ghc \
+    cabal \
+    g++ \
+    musl-dev \
+    zlib-dev \
+    htop \
+    vim  # Editor inside container
+WORKDIR /app
+COPY package.yaml cabal.project* .cabal/ . 2>/dev/null || true
+RUN cabal update
+EXPOSE 8080

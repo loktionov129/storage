@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  haskell-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    ports:
+      - "8080:8080"  # If you add web server later
+    volumes:
+      - .:/app  # Live code reload
+      - /app/out  # Exclude build output from host
+    working_dir: /app
+    environment:
+      - CABAL_DIR=/app/.cabal  # Persistent Cabal store
+    stdin_open: true  # Interactive shell
+    tty: true
+    command: tail -f /dev/null  # Keep container running
