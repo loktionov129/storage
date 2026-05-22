@@ -6,6 +6,8 @@
 
 ## Post-INstall
 
+`winget install --id Google.Chrome`
+
 ` notepad ~/.bashrc`
 
 ```bashsh
