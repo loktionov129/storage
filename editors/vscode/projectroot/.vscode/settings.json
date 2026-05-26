@@ -9,10 +9,12 @@
     "editor.renderControlCharacters": false,
     "editor.scrollBeyondLastLine": true,
     "editor.suggestSelection": "first",
-    "editor.tabSize": 2,
-    "[csharp]": {
-        "editor.tabSize": 4
-    },
+    "editor.tabSize": 4,
+    "[html]": { "editor.tabSize": 2 },
+    "[javascript]": { "editor.tabSize": 2 },
+    "[typescript]": { "editor.tabSize": 2 },
+    "[javascriptreact]": { "editor.tabSize": 2 },
+    "[typescriptreact]": { "editor.tabSize": 2 },
     "editor.unicodeHighlight.allowedLocales": {
         "ru": true
     },
