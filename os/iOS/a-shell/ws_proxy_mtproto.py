@@ -15,34 +15,20 @@ logging.basicConfig(
     stream=sys.stdout
 )
 
-# МАНКИ-ПАТЧИНГ: Ломаем строгую проверку Fake TLS, чтобы она хавала пакеты от iOS
-import proxy.fake_tls
-def fake_verify_client_hello(client_hello, secret):
-    # Вместо валидации подписи десктопа просто вытаскиваем структуру наглую
-    # Возвращаем заглушку: (client_random, session_id, timestamp)
-    # Это заставит скрипт думать, что TLS-пакет от Айфона идеален
-    import struct
-    try:
-        session_id = client_hello[43:75] # Примерное смещение сессии в TLS
-        return b'\x00'*32, session_id, int(time.time())
-    except Exception:
-        return b'\x00'*32, b'\x00'*32, 1700000000
-
-import time
-proxy.fake_tls.verify_client_hello = fake_verify_client_hello
-
-# Загружаем конфиг
 from proxy.config import proxy_config
 proxy_config.bind_host = "127.0.0.1"
 proxy_config.bind_port = 1042
 proxy_config.buffer_size = 32768
 proxy_config.proxy_protocol = False
-proxy_config.fake_tls_domain = "itldc.com"
 
-# Секрет без префиксов для внутренней математики
-SECRET_HEX = "00000000000000000000000000000000" 
-SECRET_BYTES = binascii.unhexlify(SECRET_HEX)
+# Твой реальный секрет
+proxy_config.secret = "dded87bc65c3bc43ce68b239d14b577a74"
 
+# Отрезаем префикс 'dd' для криптографического ядра (остается 32 символа)
+CLEAN_SECRET_HEX = proxy_config.secret[2:]
+SECRET_BYTES = binascii.unhexlify(CLEAN_SECRET_HEX)
+
+# Настройка жестких редиректов на рабочие IP серверов Telegram
 proxy_config.dc_redirects = {
     1: '149.154.167.220',
     2: '149.154.167.220',
@@ -61,8 +47,9 @@ async def start_proxy():
     )
     
     print(f"\n=============================================")
-    print(f" МОДЕРНИЗИРОВАННЫЙ ТУННЕЛЬ ПОД iOS ЗАПУЩЕН")
+    print(f" ТОЧНЫЙ КОНФИГ ПОД ТВОЙ СЕКРЕТ ЗАПУЩЕН")
     print(f" Порт: {proxy_config.bind_port}")
+    print(f" Секрет: {proxy_config.secret}")
     print(f"=============================================\n")
     
     async with server:
