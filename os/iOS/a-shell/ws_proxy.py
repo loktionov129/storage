@@ -2,7 +2,7 @@ import asyncio
 import socket
 
 LOCAL_HOST = '127.0.0.1'
-LOCAL_PORT = 1080
+LOCAL_PORT = 1042
 
 async def handle_client(reader, writer):
     try:
