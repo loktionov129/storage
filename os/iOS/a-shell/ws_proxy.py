@@ -5,7 +5,7 @@ import binascii
 import ssl
 
 LOCAL_HOST = '127.0.0.1'
-LOCAL_PORT = 1042  # Изменено на 1042 по твоей просьбе
+LOCAL_PORT = 1042
 
 HANDSHAKE_LEN = 64
 SKIP_LEN = 8
@@ -14,13 +14,16 @@ IV_LEN = 16
 PROTO_TAG_POS = 56
 DC_IDX_POS = 60
 
-# Реальный фейк-TLS секрет
+# Реальный TLS-секрет из Telegram
 SECRET_HEX = "ee00000000000000000000000000000000"
 SECRET_BYTES = binascii.unhexlify(SECRET_HEX)
 
+# Тот самый IP адрес из твоего файла hosts на ПК
+REAL_TG_IP = '149.154.167.220'
+
 def get_tg_ws_domain(dc: int) -> str:
     if dc < 1 or dc > 5:
-        dc = 2  # Дефолт на Европу/СНГ, если расшифровался бред
+        dc = 2  # Дефолт на DC 2, если пакет криво расшифровался
     return f'kws{dc}.web.telegram.org'
 
 def try_handshake(handshake: bytes, secret: bytes):
@@ -52,11 +55,15 @@ async def handle_client(reader, writer):
         dc_id = try_handshake(handshake, SECRET_BYTES)
         target_domain = get_tg_ws_domain(dc_id)
         
-        print(f"Подключение: DC {dc_id} -> {target_domain}")
+        print(f"Коннект от TG: DC {dc_id} -> Стучимся на {REAL_TG_IP} (имитируем {target_domain})")
         
+        # Подключаемся строго по IP адресу, но валидируем SSL по домену из hosts
         ssl_context = ssl.create_default_context()
-        remote_reader, remote_writer = await asyncio.open_connection(target_domain, 443, ssl=ssl_context)
+        remote_reader, remote_writer = await asyncio.open_connection(
+            REAL_TG_IP, 443, ssl=ssl_context, server_hostname=target_domain
+        )
         
+        # Отправляем HTTP Upgrade для WebSocket
         http_req = (
             f"GET /apiws HTTP/1.1\r\n"
             f"Host: {target_domain}\r\n"
@@ -70,8 +77,10 @@ async def handle_client(reader, writer):
         remote_writer.write(http_req)
         await remote_writer.drain()
         
+        # Пропускаем заголовки ответа сервера
         await remote_reader.readuntil(b'\r\n\r\n')
         
+        # Прокидываем оригинальный хэндшейк в вебсокет
         remote_writer.write(handshake)
         await remote_writer.drain()
 
@@ -86,15 +95,14 @@ async def handle_client(reader, writer):
 
         await asyncio.gather(forward(reader, remote_writer), forward(remote_reader, writer))
     except Exception as e:
-        print(f"Ошибка: {e}")
+        print(f"Ошибка моста: {e}")
     finally:
         writer.close()
 
 async def main():
     server = await asyncio.start_server(handle_client, LOCAL_HOST, LOCAL_PORT)
     print(f"Мост запущен на порту: {LOCAL_PORT}")
-    print(f"Используемый SECRET (Hex): {SECRET_HEX}")
-    print(f"Используемый SECRET (Bytes): {SECRET_BYTES}")
+    print(f"Маршрутизация настроена напрямую на IP: {REAL_TG_IP}")
     print("------------------------------------------------")
     async with server:
         await server.serve_forever()
