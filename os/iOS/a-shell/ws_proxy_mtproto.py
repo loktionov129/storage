@@ -1,108 +1,65 @@
+import os
+import sys
 import asyncio
-import hashlib
-import struct
+import logging
 import binascii
-import ssl
 
-LOCAL_HOST = '127.0.0.1'
-LOCAL_PORT = 1042
+# Добавляем пути импорта пакета proxy
+_repo_root = os.path.dirname(os.path.abspath(__file__))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
-HANDSHAKE_LEN = 64
-SKIP_LEN = 8
-PREKEY_LEN = 32
-IV_LEN = 16
-PROTO_TAG_POS = 56
-DC_IDX_POS = 60
+# Настройка вывода всех логов работы туннеля в консоль a-Shell
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    stream=sys.stdout
+)
 
+# Импортируем конфиг и заполняем переменные, которые требует твоя функция
+from proxy.config import proxy_config
+proxy_config.bind_host = "127.0.0.1"
+proxy_config.bind_port = 1042
+proxy_config.buffer_size = 32768
+proxy_config.proxy_protocol = False
+
+# Задаем фейковый TLS-домен маскировки (он улетает в _read_client_init)
+proxy_config.fake_tls_domain = "itldc.com"
+
+# Конвертируем хекс-строку секрете в байты, так как функция требует тип bytes
 SECRET_HEX = "ee00000000000000000000000000000000"
 SECRET_BYTES = binascii.unhexlify(SECRET_HEX)
 
-def get_tg_ws_domain(dc: int) -> str:
-    # Если из-за кривого хэндшейка вылез бред, принудительно шлем на рабочий DC 2
-    if dc < 1 or dc > 5:
-        dc = 2
-    return f'kws{dc}.web.telegram.org'
+# Заполняем редиректы дата-центров (чтобы не уходить в fallback-ошибку из кода)
+proxy_config.dc_redirects = {
+    1: '149.154.167.220',
+    2: '149.154.167.220',
+    3: '149.154.167.220',
+    4: '149.154.167.220',
+    5: '149.154.167.220'
+}
 
-def try_handshake(handshake: bytes, secret: bytes):
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+async def start_proxy():
+    from proxy.tg_ws_proxy import _handle_client
     
-    dec_prekey_and_iv = handshake[SKIP_LEN:SKIP_LEN + PREKEY_LEN + IV_LEN]
-    dec_prekey = dec_prekey_and_iv[:PREKEY_LEN]
-    dec_iv = dec_prekey_and_iv[PREKEY_LEN:]
-
-    dec_key = hashlib.sha256(dec_prekey + secret).digest()
-    dec_iv_int = int.from_bytes(dec_iv, 'big')
+    # Передаем ровно 3 аргумента (reader, writer, secret: bytes)
+    server = await asyncio.start_server(
+        lambda r, w: _handle_client(r, w, SECRET_BYTES),
+        proxy_config.bind_host,
+        proxy_config.bind_port
+    )
     
-    decryptor = Cipher(
-        algorithms.AES(dec_key), modes.CTR(dec_iv_int.to_bytes(16, 'big'))
-    ).encryptor()
-    decrypted = decryptor.update(handshake)
-
-    dc_idx = int.from_bytes(decrypted[DC_IDX_POS:DC_IDX_POS + 2], 'little', signed=True)
-    return abs(dc_idx)
-
-async def handle_client(reader, writer):
-    try:
-        try:
-            handshake = await asyncio.wait_for(reader.readexactly(HANDSHAKE_LEN), timeout=5)
-        except Exception:
-            writer.close()
-            return
-        
-        # Считаем реальный DC, который запрашивает мобильный Телеграм
-        dc_id = try_handshake(handshake, SECRET_BYTES)
-        target_domain = get_tg_ws_domain(dc_id)
-        
-        print(f"Коннект: определен DC {dc_id} -> Стучимся на {target_domain}:443")
-        
-        # Никакого хардкода IP! Доверяем системному DNS Айфона
-        ssl_context = ssl.create_default_context()
-        remote_reader, remote_writer = await asyncio.open_connection(
-            target_domain, 443, ssl=ssl_context
-        )
-        
-        # Шлем проверенный дебагом HTTP-запрос
-        http_req = (
-            f"GET /apiws HTTP/1.1\r\n"
-            f"Host: {target_domain}\r\n"
-            f"Upgrade: websocket\r\n"
-            f"Connection: Upgrade\r\n"
-            f"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-            f"Sec-WebSocket-Protocol: binary\r\n"
-            f"Sec-WebSocket-Version: 13\r\n\r\n"
-        ).encode('utf-8')
-        
-        remote_writer.write(http_req)
-        await remote_writer.drain()
-        
-        # Ждем успешный ответ 101 Switching Protocols
-        await remote_reader.readuntil(b'\r\n\r\n')
-        
-        # Пропихиваем хэндшейк в вебсокет
-        remote_writer.write(handshake)
-        await remote_writer.drain()
-
-        async def forward(src, dst):
-            try:
-                while True:
-                    data = await src.read(4096)
-                    if not data: break
-                    dst.write(data)
-                    await dst.drain()
-            except Exception: pass
-
-        await asyncio.gather(forward(reader, remote_writer), forward(remote_reader, writer))
-    except Exception as e:
-        print(f"Ошибка моста: {e}")
-    finally:
-        writer.close()
-
-async def main():
-    server = await asyncio.start_server(handle_client, LOCAL_HOST, LOCAL_PORT)
-    print(f"Автономный прокси-мост запущен на порту: {LOCAL_PORT}")
-    print("------------------------------------------------")
+    print(f"\n=============================================")
+    print(f" ОРИГИНАЛЬНЫЙ ТУННЕЛЬ УСПЕШНО ЗАПУЩЕН НА iOS")
+    print(f" Порт: {proxy_config.bind_port}")
+    print(f" Секрет: {SECRET_HEX}")
+    print(f"=============================================\n")
+    
     async with server:
         await server.serve_forever()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(start_proxy())
+    except KeyboardInterrupt:
+        print("\nСервер остановлен.")
