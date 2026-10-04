@@ -1,7 +1,9 @@
 # Proxy
 
+```
 docker build -t tg-ws-proxy .
 docker build --network=host -t tg-ws-proxy .
+```
 
 
 
