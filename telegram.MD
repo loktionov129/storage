@@ -1,5 +1,7 @@
 # Proxy
 
+docker build -t tg-ws-proxy .
+
 
 ## MTProto
 ```sh
