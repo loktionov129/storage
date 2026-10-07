@@ -27,6 +27,7 @@ bind ga 'git add .'
 bind gc 'git commit -m '
 bind gca 'git commit -v --no-edit --amend'
 bind gcam 'git commit -v --amend -m'
+bind gcl 'git branch -a | grep -vE "master|main|remotes|\*" | xargs git branch -D'
 
 # Коммит с автоматической подписью Claude в футере (Co-authored-by)
 gccl() {
