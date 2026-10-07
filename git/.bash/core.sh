@@ -7,3 +7,5 @@ bind() {
 }
 
 bind cls 'clear'
+
+bind fixlock 'killall kscreenlocker_greet; echo "NVIDIA F|_|CK YOU (C) LINUS"'
