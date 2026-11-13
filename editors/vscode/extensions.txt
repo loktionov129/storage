@@ -2,9 +2,10 @@ TSLint
 ToDo+
 Angular Language Service
 esbenp.prettier-vscode
+editorconfig.editorconfig
 StyleLint
-
-
+llvm-vs-code-extensions.vscode-clangd
+ms-vscode.cmake-tools 
 
 
 ms-azuretools.vscode-containers
